@@ -1,4 +1,4 @@
-// NotebookLM Assistant - Background Service Worker
+// Creative Automation - Background Service Worker
 // Handles all API calls to notebooklm.google.com
 
 // Open side panel when toolbar icon is clicked
@@ -797,7 +797,7 @@ async function uploadBlobToNotebook(notebookId, filename, blob, settleMs = UPLOA
 
 async function runAmazonUpload({ asins, brandMap, titleMap, domain, searchQuery, prefs }) {
   const p = { amazonLink: true, brand: true, title: true, pdfListing: true, bulletPoints: true, images: true, ...prefs };
-  const notebookTitle = (searchQuery || 'Amazon Research').trim();
+  const notebookTitle = (searchQuery || 'Amazon Search').trim();
   const CONVERT_PDF_API = 'https://amazon-api.bluestars.vn/convert-to-pdf';
 
   uploadJob.progress = { step: `Creating notebook "${notebookTitle}"…`, done: 0, total: asins.length };

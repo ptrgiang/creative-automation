@@ -7,7 +7,7 @@ function readState() {
     domain:      localStorage.getItem('nlmCompareDomain')              || localStorage.getItem('amazonDomain') || 'com',
     brandMap:    JSON.parse(localStorage.getItem('nlmCompareBrandMap') || '{}'),
     titleMap:    JSON.parse(localStorage.getItem('nlmCompareTitleMap') || '{}'),
-    searchQuery: localStorage.getItem('searchQuery')                   || 'Amazon Research',
+    searchQuery: localStorage.getItem('searchQuery')                   || 'Amazon Search',
     prefs:       JSON.parse(localStorage.getItem('downloadListingsPreferences') || '{}'),
   };
 }
@@ -16,7 +16,7 @@ function readState() {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type !== 'GET_AMAZON_COMPARE_STATE') return;
   try { sendResponse(readState()); }
-  catch { sendResponse({ asins: [], domain: 'com', brandMap: {}, titleMap: {}, searchQuery: 'Amazon Research', prefs: {} }); }
+  catch { sendResponse({ asins: [], domain: 'com', brandMap: {}, titleMap: {}, searchQuery: 'Amazon Search', prefs: {} }); }
   return true;
 });
 

@@ -3,41 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NotebookLM Assistant</title>
+  <title>Creative Automation</title>
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
   <!-- Header -->
   <header>
     <div class="logo">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-        <path d="M4 4h16v16H4z" rx="2" fill="#4285F4" opacity="0.2"/>
-        <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" stroke="#4285F4" stroke-width="1.5" fill="none"/>
-        <path d="M7 8h10M7 12h10M7 16h6" stroke="#4285F4" stroke-width="1.5" stroke-linecap="round"/>
+      <svg class="brand-mark" width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <path d="M12 8h28v16h14L34 56V39H12V8z" fill="#FFF35D" stroke="#0B0B0A" stroke-width="4" stroke-linejoin="round"/>
+        <circle cx="23" cy="31" r="3" fill="#0B0B0A"/>
+        <circle cx="34" cy="31" r="3" fill="#0B0B0A"/>
+        <path d="M17 18h5M27 18h5" stroke="#0B0B0A" stroke-width="3" stroke-linecap="round"/>
       </svg>
-      <span>NotebookLM</span>
+      <span>Creative Automation</span>
     </div>
-    <button id="account-btn" class="account-btn" title="Account">
-      <span id="auth-dot" class="dot dot-unknown"></span>
-      <div id="account-avatar" class="account-avatar hidden"></div>
-      <div class="account-meta">
-        <span id="auth-label">Checking…</span>
-        <span id="account-email" class="account-email"></span>
-      </div>
-      <svg id="account-chevron" class="chevron hidden" width="12" height="12" viewBox="0 0 24 24" fill="none">
-        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
   </header>
-
-  <!-- Account dropdown -->
-  <div id="account-dropdown" class="account-dropdown hidden">
-    <div class="dropdown-header">Signed-in accounts</div>
-    <div id="accounts-list"></div>
-    <div class="dropdown-footer">
-      <a href="https://accounts.google.com" target="_blank" class="dropdown-link">Manage accounts</a>
-    </div>
-  </div>
 
   <!-- Auth error screen -->
   <div id="auth-error" class="screen hidden">
@@ -54,34 +35,54 @@
 
   <!-- Main screen -->
   <div id="main-screen" class="screen hidden">
-    <!-- Amazon Research section (shown when on amazon-crawler.netlify.app) -->
-    <div id="amazon-section" class="amazon-section hidden">
+    <!-- Amazon Search section -->
+    <div id="amazon-section" class="amazon-section">
       <div class="amazon-section-header">
-        <svg width="14" height="14" viewBox="0 0 100 100" fill="none">
-          <circle cx="50" cy="50" r="46" stroke="#FF9900" stroke-width="8"/>
-          <path d="M22 62 Q50 82 78 62" stroke="#FF9900" stroke-width="7" fill="none" stroke-linecap="round"/>
-          <circle cx="78" cy="62" r="7" fill="#FF9900"/>
-        </svg>
-        <span>Amazon Research</span>
+        <a class="amazon-link" href="https://amazon-crawler.netlify.app/" target="_blank" rel="noopener noreferrer">
+          <img class="amazon-icon" src="amazon-search-icon.ico" alt="" aria-hidden="true">
+          <span>Amazon Search</span>
+        </a>
       </div>
-      <div id="amazon-info" class="amazon-info">Checking…</div>
+      <div id="amazon-info" class="amazon-info">Open Compare Listings</div>
       <button id="amazon-upload-btn" class="btn btn-primary btn-sm" disabled>
-        Upload Compare to NotebookLM
+        Upload Listings to NotebookLM
       </button>
       <div id="amazon-progress" class="amazon-progress hidden"></div>
     </div>
 
     <!-- Notebook selector -->
     <div class="notebook-bar">
-      <select id="notebook-select">
-        <option value="">Select a notebook…</option>
+      <select id="notebook-select" class="native-notebook-select" aria-hidden="true" tabindex="-1">
+        <option value="">Select a notebook...</option>
       </select>
-      <button id="rename-notebook" class="icon-btn hidden" title="Rename notebook">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
+      <div id="notebook-picker" class="notebook-picker">
+        <div id="notebook-display" class="notebook-display">
+          <button id="notebook-picker-button" class="notebook-picker-button" type="button">
+            <span id="notebook-picker-label" class="notebook-picker-label">Select a notebook...</span>
+            <span id="notebook-picker-count" class="notebook-picker-count"></span>
+          </button>
+          <button id="rename-notebook" class="icon-btn hidden" title="Rename notebook">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <div id="rename-inline" class="rename-inline hidden">
+          <input id="rename-inline-input" class="rename-inline-input" type="text" maxlength="120" placeholder="Notebook name">
+          <button id="rename-inline-confirm" class="icon-btn icon-btn-accent" title="Save name">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button id="rename-inline-cancel" class="icon-btn" title="Cancel rename">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div id="notebook-picker-menu" class="notebook-picker-menu hidden"></div>
+      </div>
       <button id="refresh-notebooks" class="icon-btn" title="Refresh notebooks">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
           <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -95,7 +96,7 @@
       </button>
     </div>
 
-    <!-- Notebook name modal (create / rename) -->
+    <!-- Notebook creation form -->
     <div id="nb-modal" class="nb-modal hidden">
       <div id="nb-modal-title" class="nb-modal-label">New notebook</div>
       <input id="nb-modal-input" class="nb-modal-input" type="text" placeholder="Notebook name…" maxlength="120">

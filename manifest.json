@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "NotebookLM Assistant",
+  "name": "Creative Automation",
   "version": "1.0.0",
-  "description": "Interact with NotebookLM directly from your browser",
+  "description": "Automate NotebookLM and product research workflows from your browser",
   "permissions": ["cookies", "storage", "sidePanel", "tabs", "scripting"],
   "host_permissions": [
     "https://notebooklm.google.com/*",
@@ -28,7 +28,7 @@
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "NotebookLM Assistant",
+    "default_title": "Creative Automation",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

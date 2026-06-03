@@ -1,57 +1,105 @@
 <!DOCTYPE html>
-<!-- Open this file in Chrome, then run the script to generate and download icons -->
+<!-- Open this file in Chrome to download Creative Automation extension icons. -->
 <html>
-<head><title>Generate Icons</title></head>
+<head>
+  <meta charset="UTF-8">
+  <title>Generate Creative Automation Icons</title>
+  <style>
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      margin: 0;
+      background: #dedfd9;
+      color: #0b0b0a;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      width: 128px;
+      height: 128px;
+      image-rendering: pixelated;
+    }
+  </style>
+</head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c" aria-label="Creative Automation icon preview"></canvas>
 <script>
-function makeIcon(size) {
-  const canvas = document.getElementById('c');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d');
-
-  // Background
-  ctx.fillStyle = '#1a1a2e';
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
-  ctx.roundRect(0, 0, size, size, size * 0.15);
-  ctx.fill();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
+}
 
-  // Book icon
-  const s = size * 0.6;
-  const x = (size - s) / 2;
-  const y = (size - s) / 2;
+function drawMark(ctx, size) {
+  const scale = size / 64;
+  ctx.save();
+  ctx.scale(scale, scale);
 
-  ctx.strokeStyle = '#4285F4';
-  ctx.lineWidth = size * 0.08;
+  ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#0b0b0a';
+  ctx.fillStyle = '#fff35d';
 
-  // Book outline
-  ctx.fillStyle = 'rgba(66,133,244,0.15)';
   ctx.beginPath();
-  ctx.roundRect(x, y, s, s, size * 0.05);
+  ctx.moveTo(12, 8);
+  ctx.lineTo(40, 8);
+  ctx.lineTo(40, 24);
+  ctx.lineTo(54, 24);
+  ctx.lineTo(34, 56);
+  ctx.lineTo(34, 39);
+  ctx.lineTo(12, 39);
+  ctx.closePath();
   ctx.fill();
   ctx.stroke();
 
-  // Lines
-  const lx = x + s * 0.2;
-  const lw = s * 0.6;
-  ctx.lineWidth = size * 0.06;
-  [0.35, 0.5, 0.65].forEach(fy => {
+  ctx.fillStyle = '#0b0b0a';
+  ctx.beginPath();
+  ctx.arc(23, 31, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(34, 31, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.lineWidth = 3;
+  [[17, 18], [27, 18]].forEach(([x, y]) => {
     ctx.beginPath();
-    ctx.moveTo(lx, y + s * fy);
-    ctx.lineTo(lx + lw * (fy === 0.65 ? 0.65 : 1), y + s * fy);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 5, y);
     ctx.stroke();
   });
 
+  ctx.restore();
+}
+
+function makeIcon(size, download = true) {
+  const canvas = document.getElementById('c');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  drawMark(ctx, size);
+
+  if (!download) return;
   canvas.toBlob(blob => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `icon${size}.png`;
     a.click();
+    URL.revokeObjectURL(a.href);
   });
 }
 
-[16, 48, 128].forEach((s, i) => setTimeout(() => makeIcon(s), i * 300));
+makeIcon(128, false);
+[16, 48, 128].forEach((size, index) => setTimeout(() => makeIcon(size), index * 300));
 </script>
 </body>
 </html>

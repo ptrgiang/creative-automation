@@ -1,4 +1,4 @@
-// NotebookLM Assistant - Side Panel UI
+// Creative Automation - Side Panel UI
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -15,14 +15,6 @@ const state = {
 
 const $ = id => document.getElementById(id);
 
-const authDot        = $('auth-dot');
-const authLabel      = $('auth-label');
-const accountEmail   = $('account-email');
-const accountAvatar  = $('account-avatar');
-const accountChevron = $('account-chevron');
-const accountBtn     = $('account-btn');
-const accountDropdown = $('account-dropdown');
-const accountsList   = $('accounts-list');
 const authError      = $('auth-error');
 const mainScreen     = $('main-screen');
 const nbSelect       = $('notebook-select');
@@ -46,6 +38,15 @@ const retryAuth      = $('retry-auth');
 const refreshNbs     = $('refresh-notebooks');
 const createNbBtn    = $('create-notebook');
 const renameNbBtn    = $('rename-notebook');
+const notebookPickerButton = $('notebook-picker-button');
+const notebookPickerLabel = $('notebook-picker-label');
+const notebookPickerCount = $('notebook-picker-count');
+const notebookPickerMenu = $('notebook-picker-menu');
+const notebookDisplay = $('notebook-display');
+const renameInline = $('rename-inline');
+const renameInlineInput = $('rename-inline-input');
+const renameInlineConfirm = $('rename-inline-confirm');
+const renameInlineCancel = $('rename-inline-cancel');
 const nbModal        = $('nb-modal');
 const nbModalTitle   = $('nb-modal-title');
 const nbModalInput   = $('nb-modal-input');
@@ -70,107 +71,6 @@ function showLoading(on) {
   loading.classList.toggle('hidden', !on);
 }
 
-function setAuthStatus(status, label) {
-  authDot.className = `dot dot-${status}`;
-  authLabel.textContent = label;
-}
-
-// ─── Account UI ───────────────────────────────────────────────────────────────
-
-const AVATAR_COLORS = ['#4285F4','#EA4335','#34A853','#FBBC04','#9C27B0','#FF7043','#0097A7'];
-
-function avatarColor(str) {
-  let h = 0;
-  for (const c of str) h = (h * 31 + c.charCodeAt(0)) % AVATAR_COLORS.length;
-  return AVATAR_COLORS[Math.abs(h)];
-}
-
-function makeAvatarEl(name, email, size = 28) {
-  const initial = (name || email || '?')[0].toUpperCase();
-  const color   = avatarColor(email || name || '');
-  const el = document.createElement('div');
-  el.className = 'avatar';
-  el.style.cssText = `width:${size}px;height:${size}px;font-size:${Math.round(size*0.42)}px;background:${color}`;
-  el.textContent = initial;
-  return el;
-}
-
-function showAccountDropdown(accounts, currentEmail) {
-  accountsList.innerHTML = '';
-
-  if (!accounts.length) {
-    accountsList.innerHTML = '<div class="dropdown-empty">No accounts found</div>';
-  } else {
-    for (const acc of accounts) {
-      const isCurrent = acc.email.toLowerCase() === (currentEmail || '').toLowerCase();
-      const row = document.createElement('div');
-      row.className = `account-row${isCurrent ? ' account-row-active' : ''}`;
-
-      const av = makeAvatarEl(acc.name, acc.email, 32);
-      const info = document.createElement('div');
-      info.className = 'account-row-info';
-      info.innerHTML = `
-        <span class="account-row-name">${escHtml(acc.name || acc.email)}</span>
-        <span class="account-row-email">${escHtml(acc.email)}</span>
-      `;
-
-      row.appendChild(av);
-      row.appendChild(info);
-
-      if (isCurrent) {
-        const badge = document.createElement('span');
-        badge.className = 'account-row-badge';
-        badge.textContent = 'Active';
-        row.appendChild(badge);
-      } else {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-ghost btn-sm';
-        btn.textContent = 'Switch';
-        btn.addEventListener('click', () => {
-          chrome.tabs.create({ url: `https://notebooklm.google.com/?authuser=${acc.index}` });
-          closeDropdown();
-        });
-        row.appendChild(btn);
-      }
-
-      accountsList.appendChild(row);
-    }
-  }
-
-  accountDropdown.classList.remove('hidden');
-}
-
-function closeDropdown() {
-  accountDropdown.classList.add('hidden');
-}
-
-async function loadAccountInfo(currentEmail) {
-  // Show avatar in header once we have an email
-  if (currentEmail) {
-    authDot.classList.add('hidden');
-    accountAvatar.innerHTML = '';
-    accountAvatar.appendChild(makeAvatarEl('', currentEmail, 22));
-    accountAvatar.classList.remove('hidden');
-    accountEmail.textContent = currentEmail;
-    accountChevron.classList.remove('hidden');
-  }
-}
-
-accountBtn.addEventListener('click', async () => {
-  if (accountDropdown.classList.contains('hidden')) {
-    const { accounts, currentEmail } = await send({ type: 'GET_ACCOUNTS' }).catch(() => ({ accounts: [], currentEmail: '' }));
-    showAccountDropdown(accounts, currentEmail);
-  } else {
-    closeDropdown();
-  }
-});
-
-// Close dropdown when clicking outside
-document.addEventListener('click', e => {
-  if (!accountBtn.contains(e.target) && !accountDropdown.contains(e.target)) {
-    closeDropdown();
-  }
-});
 
 function appendMessage(role, text) {
   const el = document.createElement('div');
@@ -186,22 +86,11 @@ function appendMessage(role, text) {
 }
 
 function appendAnalysisMessage(rawText) {
-  // AI message
   const msgEl = document.createElement('div');
   msgEl.className = 'msg msg-ai';
   msgEl.innerHTML = renderMarkdown(rawText);
   messages.appendChild(msgEl);
 
-  // Edit area (hidden by default, populated with raw text)
-  const editWrap = document.createElement('div');
-  editWrap.className = 'analysis-edit hidden';
-  const editTA = document.createElement('textarea');
-  editTA.className = 'analysis-textarea';
-  editTA.value = rawText;
-  editWrap.appendChild(editTA);
-  messages.appendChild(editWrap);
-
-  // Action buttons row
   const actEl = document.createElement('div');
   actEl.className = 'analysis-actions';
 
@@ -217,40 +106,120 @@ function appendAnalysisMessage(rawText) {
   imageBtn.className = 'btn btn-gem btn-sm';
   imageBtn.textContent = '✦ Image Prompt';
 
-  const gptBtn = document.createElement('button');
-  gptBtn.className = 'btn btn-gpt btn-sm';
-  gptBtn.textContent = '⬡ Product Desc';
-
   actEl.appendChild(editBtn);
   actEl.appendChild(bulletsBtn);
   actEl.appendChild(imageBtn);
-  actEl.appendChild(gptBtn);
   messages.appendChild(actEl);
 
-  // Shared Gemini response area
-  const gemEl = document.createElement('div');
-  gemEl.className = 'msg msg-gemini hidden';
-  messages.appendChild(gemEl);
+  const analysisId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  let currentText = rawText;
+  let isEditing = false;
+  let editTA = null;
+
+  function setResponseView(text) {
+    currentText = text;
+    msgEl.innerHTML = renderMarkdown(text);
+  }
+
+  function startInlineEdit() {
+    isEditing = true;
+    editBtn.textContent = 'Save';
+    editTA = document.createElement('textarea');
+    editTA.className = 'analysis-textarea analysis-textarea-inline';
+    editTA.value = currentText;
+    msgEl.innerHTML = '';
+    msgEl.appendChild(editTA);
+    editTA.focus();
+    editTA.select();
+  }
+
+  function saveInlineEdit() {
+    const nextText = editTA?.value.trim() || currentText;
+    isEditing = false;
+    editBtn.textContent = 'Edit';
+    editTA = null;
+    setResponseView(nextText);
+  }
+
+  function appendSelection(label) {
+    appendMessage('user', label);
+  }
+
+  function createResultBlock(kind) {
+    const wrap = document.createElement('div');
+    wrap.className = 'analysis-result-group';
+    wrap.dataset.kind = kind;
+    wrap.dataset.analysisId = analysisId;
+
+    const result = document.createElement('div');
+    result.className = 'msg msg-gemini';
+    wrap.appendChild(result);
+
+    messages.appendChild(wrap);
+    return { wrap, result };
+  }
+
+  function ensureResultBlock(kind) {
+    const existing = messages.querySelector(`.analysis-result-group[data-analysis-id="${analysisId}"][data-kind="${kind}"]`);
+    if (existing) {
+      return { wrap: existing, result: existing.querySelector('.msg-gemini') };
+    }
+    return createResultBlock(kind);
+  }
+
+  async function sendProductDesc(sourceText, gptBtn) {
+    gptBtn.disabled = true;
+    gptBtn.textContent = 'Opening...';
+    try {
+      await send({ type: 'SEND_TO_CHATGPT', text: sourceText });
+      gptBtn.textContent = 'Sent';
+      setTimeout(() => { gptBtn.textContent = 'Product Desc'; gptBtn.disabled = false; }, 3000);
+    } catch (e) {
+      gptBtn.textContent = 'Error';
+      setTimeout(() => { gptBtn.textContent = 'Product Desc'; gptBtn.disabled = false; }, 3000);
+    }
+  }
 
   editBtn.addEventListener('click', () => {
-    const nowHidden = editWrap.classList.toggle('hidden');
-    editBtn.textContent = nowHidden ? 'Edit' : 'Close Edit';
-    messages.scrollTop = messages.scrollHeight;
+    if (isEditing) saveInlineEdit();
+    else startInlineEdit();
   });
 
-  async function fireGemini(btn, gemId, label, thinking) {
-    const text = editTA.value.trim() || rawText;
+  async function fireGemini(btn, kind, gemId, label, thinking) {
+    if (isEditing) saveInlineEdit();
+    const text = currentText.trim();
+    appendSelection(label);
+    const { wrap, result } = ensureResultBlock(kind);
+    const existingActions = wrap.querySelector('.analysis-result-actions');
+    existingActions?.remove();
+    messages.appendChild(wrap);
     btn.disabled = true;
-    btn.textContent = '✦ Sending…';
-    gemEl.className = 'msg msg-gemini';
-    gemEl.innerHTML = `<em class="msg-thinking">${thinking}</em>`;
+    btn.textContent = 'Sending...';
+    result.className = 'msg msg-gemini';
+    result.innerHTML = `<em class="msg-thinking">${thinking}</em>`;
     messages.scrollTop = messages.scrollHeight;
     try {
       const { content } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
-      gemEl.innerHTML = content ? renderMarkdown(content) : '<em>No response received.</em>';
+      result.dataset.rawText = content || '';
+      result.innerHTML = content ? renderMarkdown(content) : '<em>No response received.</em>';
+
+      if (kind === 'bullets' && content) {
+        let gptActions = wrap.querySelector('.analysis-result-actions');
+        if (!gptActions) {
+          gptActions = document.createElement('div');
+          gptActions.className = 'analysis-result-actions';
+          wrap.appendChild(gptActions);
+        }
+        gptActions.innerHTML = '';
+        const gptBtn = document.createElement('button');
+        gptBtn.className = 'btn btn-gpt btn-sm';
+        gptBtn.textContent = 'Product Desc';
+        gptBtn.addEventListener('click', () => sendProductDesc(result.dataset.rawText || content, gptBtn));
+        gptActions.appendChild(gptBtn);
+      }
     } catch (e) {
-      gemEl.className = 'msg msg-error';
-      gemEl.textContent = `Gemini error: ${e.message}`;
+      result.className = 'msg msg-error';
+      result.textContent = `Gemini error: ${e.message}`;
     } finally {
       btn.disabled = false;
       btn.textContent = label;
@@ -259,24 +228,10 @@ function appendAnalysisMessage(rawText) {
   }
 
   bulletsBtn.addEventListener('click', () =>
-    fireGemini(bulletsBtn, '9e495ec3e447', '✦ Bullet Points', 'Creating bullet points…'));
+    fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', '✦ Bullet Points', 'Creating bullet points…'));
 
   imageBtn.addEventListener('click', () =>
-    fireGemini(imageBtn, '6a7373766848', '✦ Image Prompt', 'Generating image prompt…'));
-
-  gptBtn.addEventListener('click', async () => {
-    const text = editTA.value.trim() || rawText;
-    gptBtn.disabled = true;
-    gptBtn.textContent = '⬡ Opening…';
-    try {
-      await send({ type: 'SEND_TO_CHATGPT', text });
-      gptBtn.textContent = '⬡ Sent ✓';
-      setTimeout(() => { gptBtn.textContent = '⬡ Product Desc'; gptBtn.disabled = false; }, 3000);
-    } catch (e) {
-      gptBtn.textContent = '⬡ Error';
-      setTimeout(() => { gptBtn.textContent = '⬡ Product Desc'; gptBtn.disabled = false; }, 3000);
-    }
-  });
+    fireGemini(imageBtn, 'image', '6a7373766848', '✦ Image Prompt', 'Generating image prompt…'));
 
   messages.scrollTop = messages.scrollHeight;
 }
@@ -414,6 +369,56 @@ function renderSources(sources) {
   `).join('');
 }
 
+function formatSourceCount(count) {
+  return `${count} source${count !== 1 ? 's' : ''}`;
+}
+
+function updateNotebookPickerLabel() {
+  const selected = state.notebooks.find(n => n.id === state.selectedNotebookId);
+  if (!selected) {
+    notebookPickerLabel.textContent = 'Select a notebook...';
+    notebookPickerCount.textContent = '';
+    return;
+  }
+  notebookPickerLabel.textContent = selected.title;
+  notebookPickerCount.textContent = formatSourceCount(selected.sourceCount);
+}
+
+function renderNotebookPicker() {
+  const emptyActive = !state.selectedNotebookId ? ' notebook-picker-option-active' : '';
+  const rows = [
+    `<button class="notebook-picker-option${emptyActive}" type="button" data-notebook-id="">
+      <span class="notebook-picker-option-title">Select a notebook...</span>
+      <span class="notebook-picker-option-count"></span>
+    </button>`,
+    ...state.notebooks.map(nb => `
+      <button class="notebook-picker-option${nb.id === state.selectedNotebookId ? ' notebook-picker-option-active' : ''}" type="button" data-notebook-id="${escHtml(nb.id)}">
+        <span class="notebook-picker-option-title">${escHtml(nb.title)}</span>
+        <span class="notebook-picker-option-count">${escHtml(formatSourceCount(nb.sourceCount))}</span>
+      </button>
+    `),
+  ];
+
+  notebookPickerMenu.innerHTML = rows.join('');
+  notebookPickerMenu.querySelectorAll('.notebook-picker-option').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.notebookId || '';
+      closeNotebookPicker();
+      nbSelect.value = id;
+      await selectNotebook(id);
+    });
+  });
+  updateNotebookPickerLabel();
+}
+
+function openNotebookPicker() {
+  notebookPickerMenu.classList.remove('hidden');
+}
+
+function closeNotebookPicker() {
+  notebookPickerMenu.classList.add('hidden');
+}
+
 // Auto-resize textarea (up to 120px for side panel)
 queryInput.addEventListener('input', () => {
   queryInput.style.height = 'auto';
@@ -436,13 +441,17 @@ async function loadNotebooks() {
   for (const nb of notebooks) {
     const opt = document.createElement('option');
     opt.value = nb.id;
-    opt.textContent = `${nb.title} (${nb.sourceCount} source${nb.sourceCount !== 1 ? 's' : ''})`;
+    opt.textContent = `${nb.title} (${formatSourceCount(nb.sourceCount)})`;
     nbSelect.appendChild(opt);
   }
 
   if (savedId && notebooks.find(n => n.id === savedId)) {
     nbSelect.value = savedId;
+  } else if (savedId) {
+    state.selectedNotebookId = null;
+    nbSelect.value = '';
   }
+  renderNotebookPicker();
 }
 
 async function selectNotebook(id) {
@@ -453,6 +462,8 @@ async function selectNotebook(id) {
     noNotebook.classList.remove('hidden');
     nbContent.classList.add('hidden');
     renameNbBtn.classList.add('hidden');
+    updateNotebookPickerLabel();
+    renderNotebookPicker();
     return;
   }
 
@@ -462,6 +473,8 @@ async function selectNotebook(id) {
   nbContent.classList.remove('hidden');
   renameNbBtn.classList.remove('hidden');
   messages.innerHTML = '';
+  updateNotebookPickerLabel();
+  renderNotebookPicker();
 
   showLoading(true);
   try {
@@ -542,22 +555,11 @@ async function addSource() {
 
 // ─── Notebook modal (create / rename) ────────────────────────────────────────
 
-let modalMode = 'create'; // 'create' | 'rename'
-
-function openModal(mode) {
-  modalMode = mode;
-  if (mode === 'create') {
-    nbModalTitle.textContent   = 'New notebook';
-    nbModalConfirm.textContent = 'Create';
-    nbModalInput.value         = '';
-    nbModalInput.placeholder   = 'Notebook name…';
-  } else {
-    nbModalTitle.textContent   = 'Rename notebook';
-    nbModalConfirm.textContent = 'Rename';
-    const cur = state.notebooks.find(n => n.id === state.selectedNotebookId);
-    nbModalInput.value         = cur ? cur.title : '';
-    nbModalInput.placeholder   = 'New name…';
-  }
+function openModal() {
+  nbModalTitle.textContent   = 'New notebook';
+  nbModalConfirm.textContent = 'Create';
+  nbModalInput.value         = '';
+  nbModalInput.placeholder   = 'Notebook name...';
   nbModal.classList.remove('hidden');
   nbModalInput.focus();
   nbModalInput.select();
@@ -573,35 +575,67 @@ async function confirmModal() {
   if (!name) return;
 
   nbModalConfirm.disabled = true;
-  nbModalConfirm.textContent = '…';
+  nbModalConfirm.textContent = '...';
 
   try {
-    if (modalMode === 'create') {
-      const { id, title } = await send({ type: 'CREATE_NOTEBOOK', title: name });
-      closeModal();
-      await loadNotebooks();
-      // Auto-select the new notebook
-      nbSelect.value = id;
-      await selectNotebook(id);
-    } else {
-      await send({ type: 'RENAME_NOTEBOOK', notebookId: state.selectedNotebookId, newTitle: name });
-      closeModal();
-      // Update local state + dropdown label
-      const nb = state.notebooks.find(n => n.id === state.selectedNotebookId);
-      if (nb) nb.title = name;
-      const opt = nbSelect.querySelector(`option[value="${state.selectedNotebookId}"]`);
-      if (opt) opt.textContent = `${name} (${nb?.sourceCount ?? 0} source${nb?.sourceCount !== 1 ? 's' : ''})`;
-    }
+    const { id } = await send({ type: 'CREATE_NOTEBOOK', title: name });
+    closeModal();
+    await loadNotebooks();
+    nbSelect.value = id;
+    await selectNotebook(id);
   } catch (e) {
     alert(`Failed: ${e.message}`);
   } finally {
     nbModalConfirm.disabled = false;
-    nbModalConfirm.textContent = modalMode === 'create' ? 'Create' : 'Rename';
+    nbModalConfirm.textContent = 'Create';
   }
 }
 
-createNbBtn.addEventListener('click', () => openModal('create'));
-renameNbBtn.addEventListener('click', () => openModal('rename'));
+function openInlineRename() {
+  const current = state.notebooks.find(n => n.id === state.selectedNotebookId);
+  if (!current) return;
+  closeNotebookPicker();
+  notebookDisplay.classList.add('hidden');
+  renameInline.classList.remove('hidden');
+  renameInlineInput.value = current.title;
+  renameInlineInput.focus();
+  renameInlineInput.select();
+}
+
+function closeInlineRename() {
+  renameInline.classList.add('hidden');
+  notebookDisplay.classList.remove('hidden');
+  renameInlineInput.value = '';
+}
+
+async function confirmInlineRename() {
+  const name = renameInlineInput.value.trim();
+  if (!name || !state.selectedNotebookId) return;
+
+  renameInlineConfirm.disabled = true;
+  try {
+    await send({ type: 'RENAME_NOTEBOOK', notebookId: state.selectedNotebookId, newTitle: name });
+    const nb = state.notebooks.find(n => n.id === state.selectedNotebookId);
+    if (nb) nb.title = name;
+    const opt = nbSelect.querySelector(`option[value="${state.selectedNotebookId}"]`);
+    if (opt) opt.textContent = `${name} (${formatSourceCount(nb?.sourceCount ?? 0)})`;
+    closeInlineRename();
+    renderNotebookPicker();
+  } catch (e) {
+    alert(`Failed: ${e.message}`);
+  } finally {
+    renameInlineConfirm.disabled = false;
+  }
+}
+
+createNbBtn.addEventListener('click', () => openModal());
+renameNbBtn.addEventListener('click', openInlineRename);
+renameInlineConfirm.addEventListener('click', confirmInlineRename);
+renameInlineCancel.addEventListener('click', closeInlineRename);
+renameInlineInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmInlineRename();
+  if (e.key === 'Escape') closeInlineRename();
+});
 nbModalCancel.addEventListener('click', closeModal);
 nbModalConfirm.addEventListener('click', confirmModal);
 nbModalInput.addEventListener('keydown', e => {
@@ -668,7 +702,7 @@ fileInput.addEventListener('change', async () => {
   }
 });
 
-// ─── Amazon Research section ──────────────────────────────────────────────────
+// ─── Amazon Search section ────────────────────────────────────────────────────
 
 const amazonSection   = $('amazon-section');
 const amazonInfo      = $('amazon-info');
@@ -676,6 +710,8 @@ const amazonUploadBtn = $('amazon-upload-btn');
 const amazonProgress  = $('amazon-progress');
 
 let uploadPollingInterval = null;
+const AMAZON_SEARCH_HELP = 'Open Compare Listings';
+const AMAZON_SEARCH_NAV_HELP = 'Navigate back to Amazon Search and open Compare Listings.';
 
 // Read compare state from localStorage directly via scripting (works even without content script)
 async function readAmazonStateViaScript(tabId) {
@@ -686,7 +722,7 @@ async function readAmazonStateViaScript(tabId) {
       domain:      localStorage.getItem('nlmCompareDomain')              || localStorage.getItem('amazonDomain') || 'com',
       brandMap:    JSON.parse(localStorage.getItem('nlmCompareBrandMap') || '{}'),
       titleMap:    JSON.parse(localStorage.getItem('nlmCompareTitleMap') || '{}'),
-      searchQuery: localStorage.getItem('searchQuery')                   || 'Amazon Research',
+      searchQuery: localStorage.getItem('searchQuery')                   || 'Amazon Search',
       prefs:       JSON.parse(localStorage.getItem('downloadListingsPreferences') || '{}'),
     }),
   });
@@ -699,7 +735,7 @@ function applyAmazonState(s) {
     amazonInfo.textContent = `${s.asins.length} product${s.asins.length !== 1 ? 's' : ''} · ${q}`;
     amazonUploadBtn.disabled = false;
   } else {
-    amazonInfo.textContent = 'Open the Compare Listings modal first';
+    amazonInfo.textContent = AMAZON_SEARCH_HELP;
     amazonUploadBtn.disabled = true;
   }
 }
@@ -708,8 +744,12 @@ async function checkAmazonTab() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const onAmazon = tab?.url?.includes('amazon-crawler.netlify.app') ?? false;
-    amazonSection.classList.toggle('hidden', !onAmazon);
-    if (!onAmazon) return;
+    amazonSection.classList.remove('hidden');
+    if (!onAmazon) {
+      amazonInfo.textContent = AMAZON_SEARCH_NAV_HELP;
+      amazonUploadBtn.disabled = true;
+      return;
+    }
 
     // Try content script first; fall back to direct scripting if not injected
     let s = null;
@@ -738,7 +778,7 @@ amazonUploadBtn.addEventListener('click', async () => {
     }
 
     if (!compareState?.asins?.length) {
-      throw new Error('No products found. Open Compare Listings modal first.');
+      throw new Error('No products found. Open Compare Listings.');
     }
 
     amazonProgress.textContent = 'Starting upload…';
@@ -801,28 +841,14 @@ chrome.runtime.onMessage.addListener((msg) => {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 async function init() {
-  setAuthStatus('loading', 'Checking…');
-
   try {
-    const { ok, email } = await send({ type: 'CHECK_AUTH' });
-
-    if (!ok) {
-      setAuthStatus('error', 'Not logged in');
-      authError.classList.remove('hidden');
-      mainScreen.classList.add('hidden');
-      return;
-    }
-
-    setAuthStatus('ok', 'Connected');
     authError.classList.add('hidden');
     mainScreen.classList.remove('hidden');
     state.authed = true;
 
-    await loadAccountInfo(email);
     await loadNotebooks();
     checkAmazonTab().catch(() => {});
   } catch (e) {
-    setAuthStatus('error', 'Error');
     authError.classList.remove('hidden');
     mainScreen.classList.add('hidden');
   }
@@ -831,6 +857,22 @@ async function init() {
 // ─── Event listeners ──────────────────────────────────────────────────────────
 
 nbSelect.addEventListener('change', () => selectNotebook(nbSelect.value));
+
+notebookPickerButton.addEventListener('click', e => {
+  e.stopPropagation();
+  if (notebookPickerMenu.classList.contains('hidden')) openNotebookPicker();
+  else closeNotebookPicker();
+});
+
+notebookPickerMenu.addEventListener('click', e => {
+  e.stopPropagation();
+});
+
+document.addEventListener('click', () => closeNotebookPicker());
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeNotebookPicker();
+});
 
 refreshNbs.addEventListener('click', async () => {
   refreshNbs.disabled = true;

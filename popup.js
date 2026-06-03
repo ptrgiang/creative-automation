@@ -1,4 +1,4 @@
-// NotebookLM Assistant - Popup UI
+// Creative Automation - Popup UI
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -16,8 +16,6 @@ const state = {
 
 const $ = id => document.getElementById(id);
 
-const authDot     = $('auth-dot');
-const authLabel   = $('auth-label');
 const authError   = $('auth-error');
 const mainScreen  = $('main-screen');
 const nbSelect    = $('notebook-select');
@@ -50,11 +48,6 @@ function send(msg) {
 
 function showLoading(on) {
   loading.classList.toggle('hidden', !on);
-}
-
-function setAuthStatus(status, label) {
-  authDot.className = `dot dot-${status}`;
-  authLabel.textContent = label;
 }
 
 function appendMessage(role, text) {
@@ -232,26 +225,13 @@ async function addSource() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 async function init() {
-  setAuthStatus('loading', 'Checking…');
-
   try {
-    const { ok, reason } = await send({ type: 'CHECK_AUTH' });
-
-    if (!ok) {
-      setAuthStatus('error', 'Not logged in');
-      authError.classList.remove('hidden');
-      mainScreen.classList.add('hidden');
-      return;
-    }
-
-    setAuthStatus('ok', 'Connected');
     authError.classList.add('hidden');
     mainScreen.classList.remove('hidden');
     state.authed = true;
 
     await loadNotebooks();
   } catch (e) {
-    setAuthStatus('error', 'Error');
     authError.classList.remove('hidden');
     mainScreen.classList.add('hidden');
   }
