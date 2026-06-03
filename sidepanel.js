@@ -31,6 +31,7 @@ const fileInput      = $('file-input');
 const uploadFileBtn  = $('upload-file-btn');
 const uploadStatus   = $('upload-status');
 const loading        = $('loading');
+const loadingLabel   = $('loading-label');
 const retryAuth      = $('retry-auth');
 const refreshNbs     = $('refresh-notebooks');
 const createNbBtn    = $('create-notebook');
@@ -60,7 +61,8 @@ function send(msg) {
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
-function showLoading(on) {
+function showLoading(on, label = 'Loading workspace...') {
+  if (loadingLabel) loadingLabel.textContent = label;
   loading.classList.toggle('hidden', !on);
 }
 
@@ -346,8 +348,12 @@ function appendAnalysisMessage(rawText) {
 
 function appendThinking() {
   const el = document.createElement('div');
-  el.className = 'msg msg-thinking';
-  el.textContent = 'Thinking…';
+  el.className = 'msg msg-ai msg-skeleton';
+  el.innerHTML = `
+    <div class="skeleton-line"></div>
+    <div class="skeleton-line"></div>
+    <div class="skeleton-line skeleton-line-short"></div>
+  `;
   messages.appendChild(el);
   messages.scrollTop = messages.scrollHeight;
   return el;
@@ -477,6 +483,15 @@ function renderSources(sources) {
   `).join('');
 }
 
+function renderSourcesSkeleton(count = 4) {
+  sourcesList.innerHTML = Array.from({ length: count }, (_, idx) => `
+    <div class="source-item source-item-skeleton" aria-hidden="true">
+      <span class="skeleton-box"></span>
+      <span class="skeleton-line${idx % 3 === 2 ? ' skeleton-line-short' : ''}"></span>
+    </div>
+  `).join('');
+}
+
 function formatSourceCount(count) {
   return `${count} source${count !== 1 ? 's' : ''}`;
 }
@@ -538,6 +553,15 @@ queryInput.addEventListener('input', () => {
 // ─── Notebooks ────────────────────────────────────────────────────────────────
 
 async function loadNotebooks() {
+  notebookPickerLabel.textContent = 'Loading notebooks...';
+  notebookPickerCount.textContent = '';
+  notebookPickerMenu.innerHTML = Array.from({ length: 4 }, () => `
+    <div class="notebook-picker-option" aria-hidden="true">
+      <span class="skeleton-line"></span>
+      <span class="skeleton-line skeleton-line-short"></span>
+    </div>
+  `).join('');
+
   const { notebooks } = await send({ type: 'LIST_NOTEBOOKS' });
   state.notebooks = notebooks;
 
@@ -580,8 +604,9 @@ async function selectNotebook(id) {
   messages.innerHTML = '';
   updateNotebookPickerLabel();
   renderNotebookPicker();
+  renderSourcesSkeleton();
 
-  showLoading(true);
+  showLoading(true, 'Loading notebook...');
   try {
     const { sources } = await send({ type: 'GET_NOTEBOOK', notebookId: id });
     state.sources = sources;
@@ -666,7 +691,7 @@ function openInlineCreate() {
   notebookDisplay.classList.add('hidden');
   renameInline.classList.remove('hidden');
   renameInlineInput.value = '';
-  renameInlineInput.placeholder = 'New notebook name';
+  renameInlineInput.placeholder = 'Name the new notebook';
   renameInlineConfirm.title = 'Create notebook';
   renameInlineCancel.title = 'Cancel create';
   renameInlineInput.focus();
@@ -680,7 +705,7 @@ function openInlineRename() {
   notebookDisplay.classList.add('hidden');
   renameInline.classList.remove('hidden');
   renameInlineInput.value = current.title;
-  renameInlineInput.placeholder = 'Notebook name';
+  renameInlineInput.placeholder = 'Name this notebook';
   renameInlineConfirm.title = 'Save name';
   renameInlineCancel.title = 'Cancel rename';
   renameInlineInput.focus();
@@ -691,7 +716,7 @@ function closeInlineRename() {
   renameInline.classList.add('hidden');
   notebookDisplay.classList.remove('hidden');
   renameInlineInput.value = '';
-  renameInlineInput.placeholder = 'Notebook name';
+  renameInlineInput.placeholder = 'Name this notebook';
 }
 
 async function confirmInlineNotebook() {
@@ -823,9 +848,11 @@ function applyAmazonState(s) {
   if (s?.asins?.length) {
     const q = s.searchQuery ? `"${s.searchQuery}"` : 'unknown query';
     amazonInfo.textContent = `${s.asins.length} product${s.asins.length !== 1 ? 's' : ''} · ${q}`;
+    amazonSection.classList.add('amazon-section-ready');
     amazonUploadBtn.disabled = false;
   } else {
     amazonInfo.textContent = AMAZON_SEARCH_HELP;
+    amazonSection.classList.remove('amazon-section-ready');
     amazonUploadBtn.disabled = true;
   }
 }
@@ -837,6 +864,7 @@ async function checkAmazonTab() {
     amazonSection.classList.remove('hidden');
     if (!onAmazon) {
       amazonInfo.textContent = AMAZON_SEARCH_NAV_HELP;
+      amazonSection.classList.remove('amazon-section-ready');
       amazonUploadBtn.disabled = true;
       return;
     }
@@ -921,11 +949,9 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
 
 // Auto-update when compare modal opens (content script polls localStorage)
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type !== 'AMAZON_COMPARE_UPDATED' || !msg.asins?.length) return;
+  if (msg.type !== 'AMAZON_COMPARE_UPDATED') return;
   amazonSection.classList.remove('hidden');
-  const q = msg.searchQuery ? `"${msg.searchQuery}"` : 'unknown query';
-  amazonInfo.textContent = `${msg.asins.length} product${msg.asins.length !== 1 ? 's' : ''} · ${q}`;
-  amazonUploadBtn.disabled = false;
+  applyAmazonState(msg);
 });
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

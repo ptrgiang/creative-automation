@@ -1,14 +1,19 @@
 // Content script for amazon-crawler.netlify.app
-// Reads compare state from localStorage and responds to extension messages
+// Reads compare state from localStorage and responds to extension messages.
+
+function parseJson(value, fallback) {
+  try { return JSON.parse(value || ''); }
+  catch { return fallback; }
+}
 
 function readState() {
   return {
-    asins:       JSON.parse(localStorage.getItem('nlmCompareAsins')   || '[]'),
-    domain:      localStorage.getItem('nlmCompareDomain')              || localStorage.getItem('amazonDomain') || 'com',
-    brandMap:    JSON.parse(localStorage.getItem('nlmCompareBrandMap') || '{}'),
-    titleMap:    JSON.parse(localStorage.getItem('nlmCompareTitleMap') || '{}'),
-    searchQuery: localStorage.getItem('searchQuery')                   || 'Amazon Search',
-    prefs:       JSON.parse(localStorage.getItem('downloadListingsPreferences') || '{}'),
+    asins:       parseJson(localStorage.getItem('nlmCompareAsins'), []),
+    domain:      localStorage.getItem('nlmCompareDomain') || localStorage.getItem('amazonDomain') || 'com',
+    brandMap:    parseJson(localStorage.getItem('nlmCompareBrandMap'), {}),
+    titleMap:    parseJson(localStorage.getItem('nlmCompareTitleMap'), {}),
+    searchQuery: localStorage.getItem('searchQuery') || 'Amazon Search',
+    prefs:       parseJson(localStorage.getItem('downloadListingsPreferences'), {}),
   };
 }
 
@@ -20,14 +25,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// Poll for nlmCompareAsins appearing/changing — fires as soon as the compare modal opens
-let _lastRaw = undefined;
+// Poll localStorage and update the extension when the compare modal opens/closes or changes.
+let _lastSignature = undefined;
 setInterval(() => {
   try {
-    const raw = localStorage.getItem('nlmCompareAsins');
-    if (raw === _lastRaw) return;
-    _lastRaw = raw;
-    if (!raw) return;
-    chrome.runtime.sendMessage({ type: 'AMAZON_COMPARE_UPDATED', ...readState() });
+    const state = readState();
+    const signature = JSON.stringify({
+      asins: state.asins,
+      domain: state.domain,
+      brandMap: state.brandMap,
+      titleMap: state.titleMap,
+      searchQuery: state.searchQuery,
+      prefs: state.prefs,
+    });
+    if (signature === _lastSignature) return;
+    _lastSignature = signature;
+    chrome.runtime.sendMessage({ type: 'AMAZON_COMPARE_UPDATED', ...state });
   } catch {}
 }, 500);
