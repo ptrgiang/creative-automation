@@ -598,6 +598,18 @@ function renderSources(sources) {
   `).join('');
 }
 
+function setAddSourceLoading(isLoading) {
+  addSourceBtn.disabled = isLoading;
+  addSourceBtn.classList.toggle('is-loading', isLoading);
+  addSourceBtn.setAttribute('aria-label', isLoading ? 'Adding URL' : 'Add URL');
+  addSourceBtn.title = isLoading ? 'Adding URL' : 'Add URL';
+  addSourceBtn.innerHTML = isLoading
+    ? '<span class="btn-spinner" aria-hidden="true"></span>'
+    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>`;
+}
+
 function renderSourcesSkeleton(count = 4) {
   sourcesList.innerHTML = Array.from({ length: count }, (_, idx) => `
     <div class="source-item source-item-skeleton" aria-hidden="true">
@@ -791,8 +803,7 @@ async function addSource() {
   const url = sourceUrl.value.trim();
   if (!url || !state.selectedNotebookId) return;
 
-  addSourceBtn.disabled = true;
-  addSourceBtn.textContent = 'Adding…';
+  setAddSourceLoading(true);
 
   try {
     await send({ type: 'ADD_URL_SOURCE', notebookId: state.selectedNotebookId, url });
@@ -803,8 +814,7 @@ async function addSource() {
   } catch (e) {
     alert(`Failed to add source: ${e.message}`);
   } finally {
-    addSourceBtn.disabled = false;
-    addSourceBtn.textContent = 'Add URL';
+    setAddSourceLoading(false);
   }
 }
 
