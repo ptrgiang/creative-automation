@@ -24,9 +24,6 @@ const messages       = $('messages');
 const queryInput     = $('query-input');
 const sendBtn        = $('send-btn');
 const clearChat      = $('clear-chat');
-const geminiBulletsBtn = $('gemini-bullets-btn');
-const geminiImageBtn   = $('gemini-image-btn');
-const chatgptBtn       = $('chatgpt-btn');
 const sourcesList    = $('sources-list');
 const sourceUrl      = $('source-url');
 const addSourceBtn   = $('add-source-btn');
@@ -47,11 +44,7 @@ const renameInline = $('rename-inline');
 const renameInlineInput = $('rename-inline-input');
 const renameInlineConfirm = $('rename-inline-confirm');
 const renameInlineCancel = $('rename-inline-cancel');
-const nbModal        = $('nb-modal');
-const nbModalTitle   = $('nb-modal-title');
-const nbModalInput   = $('nb-modal-input');
-const nbModalCancel  = $('nb-modal-cancel');
-const nbModalConfirm = $('nb-modal-confirm');
+let inlineNotebookMode = 'rename';
 
 // ─── Messaging ────────────────────────────────────────────────────────────────
 
@@ -71,16 +64,171 @@ function showLoading(on) {
   loading.classList.toggle('hidden', !on);
 }
 
+function messageBody(el) {
+  let body = el.querySelector('.msg-body');
+  if (!body) {
+    body = document.createElement('div');
+    body.className = 'msg-body';
+    el.prepend(body);
+  }
+  return body;
+}
+
+function responseActionsRow(el) {
+  let row = el.nextElementSibling;
+  if (row?.classList.contains('msg-actions-row') && row.dataset.forMessage === el.dataset.messageId) {
+    return row;
+  }
+
+  row = document.createElement('div');
+  row.className = 'msg-actions-row';
+  row.dataset.forMessage = el.dataset.messageId;
+  el.insertAdjacentElement('afterend', row);
+  return row;
+}
+
+function removeResponseControls(el) {
+  const row = el.nextElementSibling;
+  if (row?.classList.contains('msg-actions-row') && row.dataset.forMessage === el.dataset.messageId) {
+    row.remove();
+  }
+  el.classList.remove('msg-copyable');
+  delete el.dataset.editing;
+  delete el.dataset.copyText;
+}
+
+function setIconButtonState(btn, stateName) {
+  if (stateName === 'save') {
+    btn.setAttribute('aria-label', 'Save response');
+    btn.title = 'Save response';
+    btn.classList.add('editing');
+    btn.innerHTML = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    `;
+    return;
+  }
+
+  btn.setAttribute('aria-label', 'Edit response');
+  btn.title = 'Edit response';
+  btn.classList.remove('editing');
+  btn.innerHTML = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M13 5l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+      <path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
+    </svg>
+  `;
+}
+
+function startResponseEdit(el) {
+  const body = messageBody(el);
+  const btn = responseActionsRow(el).querySelector('.msg-edit-btn');
+  body.contentEditable = 'true';
+  body.classList.add('msg-body-editing');
+  el.dataset.editing = 'true';
+  setIconButtonState(btn, 'save');
+  body.focus();
+
+  const range = document.createRange();
+  range.selectNodeContents(body);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function saveResponseEdit(el) {
+  const body = messageBody(el);
+  const nextText = body.innerText.trim() || el.dataset.copyText || '';
+  const nextHtml = body.innerHTML || renderMarkdown(nextText);
+  const btn = responseActionsRow(el).querySelector('.msg-edit-btn');
+  body.contentEditable = 'false';
+  body.classList.remove('msg-body-editing');
+  delete el.dataset.editing;
+  setIconButtonState(btn, 'edit');
+  setResponseHtml(el, nextHtml, nextText, el._responseOnSave);
+  el._responseOnSave?.(nextText, nextHtml);
+}
+
+function ensureEditButton(el) {
+  const row = responseActionsRow(el);
+  let btn = row.querySelector('.msg-edit-btn');
+  if (btn) return btn;
+
+  btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msg-edit-btn';
+  setIconButtonState(btn, 'edit');
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (el.dataset.editing === 'true') saveResponseEdit(el);
+    else startResponseEdit(el);
+  });
+  row.prepend(btn);
+  return btn;
+}
+
+function ensureCopyButton(el) {
+  const row = responseActionsRow(el);
+  let btn = row.querySelector('.msg-copy-btn');
+  if (btn) return btn;
+
+  btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msg-copy-btn';
+  btn.setAttribute('aria-label', 'Copy response');
+  btn.title = 'Copy response';
+  btn.innerHTML = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"></path>
+    </svg>
+  `;
+  btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    const text = el.dataset.copyText || messageBody(el).innerText || '';
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.classList.add('copied');
+      setTimeout(() => btn.classList.remove('copied'), 900);
+    } catch {
+      btn.classList.add('copy-error');
+      setTimeout(() => btn.classList.remove('copy-error'), 900);
+    }
+  });
+  row.appendChild(btn);
+  return btn;
+}
+
+function setTransientResponse(el, html) {
+  messageBody(el).innerHTML = html;
+  removeResponseControls(el);
+}
+
+function setResponseHtml(el, html, rawText, onSave) {
+  if (!el.dataset.messageId) {
+    el.dataset.messageId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+  messageBody(el).innerHTML = html;
+  el.dataset.copyText = rawText || '';
+  if (onSave) el._responseOnSave = onSave;
+  el.classList.add('msg-copyable');
+  ensureEditButton(el);
+  ensureCopyButton(el);
+}
 
 function appendMessage(role, text) {
   const el = document.createElement('div');
   el.className = `msg msg-${role}`;
   if (role === 'ai') {
-    el.innerHTML = renderMarkdown(text);
+    messages.appendChild(el);
+    setResponseHtml(el, renderMarkdown(text), text);
   } else {
     el.textContent = text;
+    messages.appendChild(el);
   }
-  messages.appendChild(el);
   messages.scrollTop = messages.scrollHeight;
   return el;
 }
@@ -88,15 +236,9 @@ function appendMessage(role, text) {
 function appendAnalysisMessage(rawText) {
   const msgEl = document.createElement('div');
   msgEl.className = 'msg msg-ai';
-  msgEl.innerHTML = renderMarkdown(rawText);
+  let currentText = rawText;
   messages.appendChild(msgEl);
-
-  const actEl = document.createElement('div');
-  actEl.className = 'analysis-actions';
-
-  const editBtn = document.createElement('button');
-  editBtn.className = 'btn btn-ghost btn-sm';
-  editBtn.textContent = 'Edit';
+  setResponseHtml(msgEl, renderMarkdown(rawText), rawText, text => { currentText = text; });
 
   const bulletsBtn = document.createElement('button');
   bulletsBtn.className = 'btn btn-gem btn-sm';
@@ -106,40 +248,12 @@ function appendAnalysisMessage(rawText) {
   imageBtn.className = 'btn btn-gem btn-sm';
   imageBtn.textContent = '✦ Image Prompt';
 
-  actEl.appendChild(editBtn);
-  actEl.appendChild(bulletsBtn);
-  actEl.appendChild(imageBtn);
-  messages.appendChild(actEl);
+  const msgActions = responseActionsRow(msgEl);
+  const msgEditBtn = msgActions.querySelector('.msg-edit-btn');
+  msgActions.insertBefore(bulletsBtn, msgEditBtn);
+  msgActions.insertBefore(imageBtn, msgEditBtn);
 
   const analysisId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  let currentText = rawText;
-  let isEditing = false;
-  let editTA = null;
-
-  function setResponseView(text) {
-    currentText = text;
-    msgEl.innerHTML = renderMarkdown(text);
-  }
-
-  function startInlineEdit() {
-    isEditing = true;
-    editBtn.textContent = 'Save';
-    editTA = document.createElement('textarea');
-    editTA.className = 'analysis-textarea analysis-textarea-inline';
-    editTA.value = currentText;
-    msgEl.innerHTML = '';
-    msgEl.appendChild(editTA);
-    editTA.focus();
-    editTA.select();
-  }
-
-  function saveInlineEdit() {
-    const nextText = editTA?.value.trim() || currentText;
-    isEditing = false;
-    editBtn.textContent = 'Edit';
-    editTA = null;
-    setResponseView(nextText);
-  }
 
   function appendSelection(label) {
     appendMessage('user', label);
@@ -180,13 +294,8 @@ function appendAnalysisMessage(rawText) {
     }
   }
 
-  editBtn.addEventListener('click', () => {
-    if (isEditing) saveInlineEdit();
-    else startInlineEdit();
-  });
-
   async function fireGemini(btn, kind, gemId, label, thinking) {
-    if (isEditing) saveInlineEdit();
+    if (msgEl.dataset.editing === 'true') saveResponseEdit(msgEl);
     const text = currentText.trim();
     appendSelection(label);
     const { wrap, result } = ensureResultBlock(kind);
@@ -194,32 +303,31 @@ function appendAnalysisMessage(rawText) {
     existingActions?.remove();
     messages.appendChild(wrap);
     btn.disabled = true;
-    btn.textContent = 'Sending...';
     result.className = 'msg msg-gemini';
-    result.innerHTML = `<em class="msg-thinking">${thinking}</em>`;
+    setTransientResponse(result, `<em class="msg-thinking">${thinking}</em>`);
     messages.scrollTop = messages.scrollHeight;
     try {
       const { content } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
       result.dataset.rawText = content || '';
-      result.innerHTML = content ? renderMarkdown(content) : '<em>No response received.</em>';
+      setResponseHtml(
+        result,
+        content ? renderMarkdown(content) : '<em>No response received.</em>',
+        content || 'No response received.',
+        savedText => { result.dataset.rawText = savedText; }
+      );
 
       if (kind === 'bullets' && content) {
-        let gptActions = wrap.querySelector('.analysis-result-actions');
-        if (!gptActions) {
-          gptActions = document.createElement('div');
-          gptActions.className = 'analysis-result-actions';
-          wrap.appendChild(gptActions);
-        }
-        gptActions.innerHTML = '';
+        const gptActions = responseActionsRow(result);
+        gptActions.querySelector('.btn-gpt')?.remove();
         const gptBtn = document.createElement('button');
         gptBtn.className = 'btn btn-gpt btn-sm';
         gptBtn.textContent = 'Product Desc';
         gptBtn.addEventListener('click', () => sendProductDesc(result.dataset.rawText || content, gptBtn));
-        gptActions.appendChild(gptBtn);
+        gptActions.insertBefore(gptBtn, gptActions.querySelector('.msg-edit-btn'));
       }
     } catch (e) {
       result.className = 'msg msg-error';
-      result.textContent = `Gemini error: ${e.message}`;
+      setTransientResponse(result, `Gemini error: ${escHtml(e.message)}`);
     } finally {
       btn.disabled = false;
       btn.textContent = label;
@@ -425,9 +533,6 @@ queryInput.addEventListener('input', () => {
   queryInput.style.height = Math.min(queryInput.scrollHeight, 120) + 'px';
   const hasText = !!queryInput.value.trim();
   sendBtn.disabled          = !hasText || state.sending;
-  geminiBulletsBtn.disabled = !hasText;
-  geminiImageBtn.disabled   = !hasText;
-  chatgptBtn.disabled       = !hasText;
 });
 
 // ─── Notebooks ────────────────────────────────────────────────────────────────
@@ -553,51 +658,31 @@ async function addSource() {
   }
 }
 
-// ─── Notebook modal (create / rename) ────────────────────────────────────────
+// ─── Inline notebook create / rename ─────────────────────────────────────────
 
-function openModal() {
-  nbModalTitle.textContent   = 'New notebook';
-  nbModalConfirm.textContent = 'Create';
-  nbModalInput.value         = '';
-  nbModalInput.placeholder   = 'Notebook name...';
-  nbModal.classList.remove('hidden');
-  nbModalInput.focus();
-  nbModalInput.select();
-}
-
-function closeModal() {
-  nbModal.classList.add('hidden');
-  nbModalInput.value = '';
-}
-
-async function confirmModal() {
-  const name = nbModalInput.value.trim();
-  if (!name) return;
-
-  nbModalConfirm.disabled = true;
-  nbModalConfirm.textContent = '...';
-
-  try {
-    const { id } = await send({ type: 'CREATE_NOTEBOOK', title: name });
-    closeModal();
-    await loadNotebooks();
-    nbSelect.value = id;
-    await selectNotebook(id);
-  } catch (e) {
-    alert(`Failed: ${e.message}`);
-  } finally {
-    nbModalConfirm.disabled = false;
-    nbModalConfirm.textContent = 'Create';
-  }
+function openInlineCreate() {
+  inlineNotebookMode = 'create';
+  closeNotebookPicker();
+  notebookDisplay.classList.add('hidden');
+  renameInline.classList.remove('hidden');
+  renameInlineInput.value = '';
+  renameInlineInput.placeholder = 'New notebook name';
+  renameInlineConfirm.title = 'Create notebook';
+  renameInlineCancel.title = 'Cancel create';
+  renameInlineInput.focus();
 }
 
 function openInlineRename() {
   const current = state.notebooks.find(n => n.id === state.selectedNotebookId);
   if (!current) return;
+  inlineNotebookMode = 'rename';
   closeNotebookPicker();
   notebookDisplay.classList.add('hidden');
   renameInline.classList.remove('hidden');
   renameInlineInput.value = current.title;
+  renameInlineInput.placeholder = 'Notebook name';
+  renameInlineConfirm.title = 'Save name';
+  renameInlineCancel.title = 'Cancel rename';
   renameInlineInput.focus();
   renameInlineInput.select();
 }
@@ -606,14 +691,25 @@ function closeInlineRename() {
   renameInline.classList.add('hidden');
   notebookDisplay.classList.remove('hidden');
   renameInlineInput.value = '';
+  renameInlineInput.placeholder = 'Notebook name';
 }
 
-async function confirmInlineRename() {
+async function confirmInlineNotebook() {
   const name = renameInlineInput.value.trim();
-  if (!name || !state.selectedNotebookId) return;
+  if (!name) return;
 
   renameInlineConfirm.disabled = true;
   try {
+    if (inlineNotebookMode === 'create') {
+      const { id } = await send({ type: 'CREATE_NOTEBOOK', title: name });
+      closeInlineRename();
+      await loadNotebooks();
+      nbSelect.value = id;
+      await selectNotebook(id);
+      return;
+    }
+
+    if (!state.selectedNotebookId) return;
     await send({ type: 'RENAME_NOTEBOOK', notebookId: state.selectedNotebookId, newTitle: name });
     const nb = state.notebooks.find(n => n.id === state.selectedNotebookId);
     if (nb) nb.title = name;
@@ -628,19 +724,13 @@ async function confirmInlineRename() {
   }
 }
 
-createNbBtn.addEventListener('click', () => openModal());
+createNbBtn.addEventListener('click', openInlineCreate);
 renameNbBtn.addEventListener('click', openInlineRename);
-renameInlineConfirm.addEventListener('click', confirmInlineRename);
+renameInlineConfirm.addEventListener('click', confirmInlineNotebook);
 renameInlineCancel.addEventListener('click', closeInlineRename);
 renameInlineInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') confirmInlineRename();
+  if (e.key === 'Enter') confirmInlineNotebook();
   if (e.key === 'Escape') closeInlineRename();
-});
-nbModalCancel.addEventListener('click', closeModal);
-nbModalConfirm.addEventListener('click', confirmModal);
-nbModalInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') confirmModal();
-  if (e.key === 'Escape') closeModal();
 });
 
 // ─── File upload ──────────────────────────────────────────────────────────────
@@ -885,67 +975,6 @@ queryInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendQuery();
-  }
-});
-
-async function sendChatToGemini(btn, gemId, label) {
-  const text = queryInput.value.trim();
-  if (!text) return;
-
-  queryInput.value = '';
-  queryInput.style.height = 'auto';
-  sendBtn.disabled = true;
-  geminiBulletsBtn.disabled = true;
-  geminiImageBtn.disabled   = true;
-
-  appendMessage('user', text);
-
-  const gemEl = document.createElement('div');
-  gemEl.className = 'msg msg-gemini';
-  gemEl.innerHTML = `<em class="msg-thinking">Asking ${label}…</em>`;
-  messages.appendChild(gemEl);
-  messages.scrollTop = messages.scrollHeight;
-
-  try {
-    const { content } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
-    gemEl.innerHTML = content ? renderMarkdown(content) : '<em>No response received.</em>';
-  } catch (e) {
-    gemEl.className = 'msg msg-error';
-    gemEl.textContent = `Gemini error: ${e.message}`;
-  } finally {
-    geminiBulletsBtn.disabled = false;
-    geminiImageBtn.disabled   = false;
-    messages.scrollTop = messages.scrollHeight;
-  }
-}
-
-geminiBulletsBtn.addEventListener('click', () => sendChatToGemini(geminiBulletsBtn, '9e495ec3e447', 'Bullets'));
-geminiImageBtn.addEventListener('click',   () => sendChatToGemini(geminiImageBtn,   '6a7373766848', 'Image'));
-
-chatgptBtn.addEventListener('click', async () => {
-  const text = queryInput.value.trim();
-  if (!text) return;
-  queryInput.value = '';
-  queryInput.style.height = 'auto';
-  sendBtn.disabled = true;
-  chatgptBtn.disabled = true;
-  appendMessage('user', text);
-  const statusEl = document.createElement('div');
-  statusEl.className = 'msg msg-thinking';
-  statusEl.textContent = 'Opening ChatGPT…';
-  messages.appendChild(statusEl);
-  messages.scrollTop = messages.scrollHeight;
-  try {
-    await send({ type: 'SEND_TO_CHATGPT', text });
-    statusEl.textContent = '⬡ Sent to ChatGPT — check the tab';
-    statusEl.className = 'msg msg-ai';
-    statusEl.style.fontSize = '11px';
-  } catch (e) {
-    statusEl.textContent = `ChatGPT error: ${e.message}`;
-    statusEl.className = 'msg msg-error';
-  } finally {
-    chatgptBtn.disabled = false;
-    messages.scrollTop = messages.scrollHeight;
   }
 });
 
