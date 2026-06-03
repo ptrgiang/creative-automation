@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "NotebookLM Assistant",
+  "version": "1.0.0",
+  "description": "Interact with NotebookLM directly from your browser",
+  "permissions": ["cookies", "storage", "sidePanel", "tabs", "scripting"],
+  "host_permissions": [
+    "https://notebooklm.google.com/*",
+    "https://*.google.com/*",
+    "https://amazon-crawler.netlify.app/*",
+    "https://amazon-api.bluestars.vn/*",
+    "https://m.media-amazon.com/*",
+    "https://images-na.ssl-images-amazon.com/*",
+    "https://gemini.google.com/*",
+    "https://chatgpt.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://amazon-crawler.netlify.app/*"],
+      "js": ["content-amazon.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "NotebookLM Assistant",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

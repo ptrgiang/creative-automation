@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<!-- Open this file in Chrome, then run the script to generate and download icons -->
+<html>
+<head><title>Generate Icons</title></head>
+<body>
+<canvas id="c"></canvas>
+<script>
+function makeIcon(size) {
+  const canvas = document.getElementById('c');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, size * 0.15);
+  ctx.fill();
+
+  // Book icon
+  const s = size * 0.6;
+  const x = (size - s) / 2;
+  const y = (size - s) / 2;
+
+  ctx.strokeStyle = '#4285F4';
+  ctx.lineWidth = size * 0.08;
+  ctx.lineCap = 'round';
+
+  // Book outline
+  ctx.fillStyle = 'rgba(66,133,244,0.15)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, s, s, size * 0.05);
+  ctx.fill();
+  ctx.stroke();
+
+  // Lines
+  const lx = x + s * 0.2;
+  const lw = s * 0.6;
+  ctx.lineWidth = size * 0.06;
+  [0.35, 0.5, 0.65].forEach(fy => {
+    ctx.beginPath();
+    ctx.moveTo(lx, y + s * fy);
+    ctx.lineTo(lx + lw * (fy === 0.65 ? 0.65 : 1), y + s * fy);
+    ctx.stroke();
+  });
+
+  canvas.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `icon${size}.png`;
+    a.click();
+  });
+}
+
+[16, 48, 128].forEach((s, i) => setTimeout(() => makeIcon(s), i * 300));
+</script>
+</body>
+</html>

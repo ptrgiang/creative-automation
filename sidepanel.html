@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NotebookLM Assistant</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M4 4h16v16H4z" rx="2" fill="#4285F4" opacity="0.2"/>
+        <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" stroke="#4285F4" stroke-width="1.5" fill="none"/>
+        <path d="M7 8h10M7 12h10M7 16h6" stroke="#4285F4" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span>NotebookLM</span>
+    </div>
+    <button id="account-btn" class="account-btn" title="Account">
+      <span id="auth-dot" class="dot dot-unknown"></span>
+      <div id="account-avatar" class="account-avatar hidden"></div>
+      <div class="account-meta">
+        <span id="auth-label">Checking…</span>
+        <span id="account-email" class="account-email"></span>
+      </div>
+      <svg id="account-chevron" class="chevron hidden" width="12" height="12" viewBox="0 0 24 24" fill="none">
+        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- Account dropdown -->
+  <div id="account-dropdown" class="account-dropdown hidden">
+    <div class="dropdown-header">Signed-in accounts</div>
+    <div id="accounts-list"></div>
+    <div class="dropdown-footer">
+      <a href="https://accounts.google.com" target="_blank" class="dropdown-link">Manage accounts</a>
+    </div>
+  </div>
+
+  <!-- Auth error screen -->
+  <div id="auth-error" class="screen hidden">
+    <div class="empty-state">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="#EA4335" stroke-width="1.5"/>
+        <path d="M12 7v6M12 16v.5" stroke="#EA4335" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <p>Not logged in to NotebookLM</p>
+      <a href="https://notebooklm.google.com" target="_blank" class="btn btn-primary">Open NotebookLM</a>
+      <button id="retry-auth" class="btn btn-ghost">Retry</button>
+    </div>
+  </div>
+
+  <!-- Main screen -->
+  <div id="main-screen" class="screen hidden">
+    <!-- Amazon Research section (shown when on amazon-crawler.netlify.app) -->
+    <div id="amazon-section" class="amazon-section hidden">
+      <div class="amazon-section-header">
+        <svg width="14" height="14" viewBox="0 0 100 100" fill="none">
+          <circle cx="50" cy="50" r="46" stroke="#FF9900" stroke-width="8"/>
+          <path d="M22 62 Q50 82 78 62" stroke="#FF9900" stroke-width="7" fill="none" stroke-linecap="round"/>
+          <circle cx="78" cy="62" r="7" fill="#FF9900"/>
+        </svg>
+        <span>Amazon Research</span>
+      </div>
+      <div id="amazon-info" class="amazon-info">Checking…</div>
+      <button id="amazon-upload-btn" class="btn btn-primary btn-sm" disabled>
+        Upload Compare to NotebookLM
+      </button>
+      <div id="amazon-progress" class="amazon-progress hidden"></div>
+    </div>
+
+    <!-- Notebook selector -->
+    <div class="notebook-bar">
+      <select id="notebook-select">
+        <option value="">Select a notebook…</option>
+      </select>
+      <button id="rename-notebook" class="icon-btn hidden" title="Rename notebook">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <button id="refresh-notebooks" class="icon-btn" title="Refresh notebooks">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <button id="create-notebook" class="icon-btn icon-btn-accent" title="New notebook">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Notebook name modal (create / rename) -->
+    <div id="nb-modal" class="nb-modal hidden">
+      <div id="nb-modal-title" class="nb-modal-label">New notebook</div>
+      <input id="nb-modal-input" class="nb-modal-input" type="text" placeholder="Notebook name…" maxlength="120">
+      <div class="nb-modal-actions">
+        <button id="nb-modal-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+        <button id="nb-modal-confirm" class="btn btn-primary btn-sm">Create</button>
+      </div>
+    </div>
+
+    <!-- No notebook selected -->
+    <div id="no-notebook" class="empty-state">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="#666" stroke-width="1.5"/>
+      </svg>
+      <p>Select a notebook to begin</p>
+    </div>
+
+    <!-- Notebook content (tabs) -->
+    <div id="notebook-content" class="hidden">
+      <div class="tabs">
+        <button class="tab active" data-tab="chat">Chat</button>
+        <button class="tab" data-tab="sources">Sources</button>
+      </div>
+
+      <!-- Chat tab -->
+      <div id="tab-chat" class="tab-panel">
+        <div id="messages" class="messages"></div>
+        <div class="chat-footer">
+          <div class="input-row">
+            <textarea id="query-input" placeholder="Ask your notebook…" rows="1"></textarea>
+            <button id="send-btn" class="send-btn" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="chat-actions">
+            <button id="clear-chat" class="btn btn-ghost btn-sm">Clear chat</button>
+            <button id="gemini-bullets-btn" class="btn btn-gem btn-sm" disabled>✦ Bullets</button>
+            <button id="gemini-image-btn" class="btn btn-gem btn-sm" disabled>✦ Image</button>
+            <button id="chatgpt-btn" class="btn btn-gpt btn-sm" disabled>⬡ Product</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sources tab -->
+      <div id="tab-sources" class="tab-panel hidden">
+        <div id="sources-list" class="sources-list"></div>
+        <div class="source-add">
+          <div class="source-url-row">
+            <input id="source-url" type="url" placeholder="https://…  or YouTube URL">
+            <button id="add-source-btn" class="btn btn-primary btn-sm">Add URL</button>
+          </div>
+          <div class="source-file-row">
+            <input id="file-input" type="file" accept=".pdf,.txt,.md,.docx,.csv,.epub,.mp3,.m4a,.wav,.aac,.ogg,.mp4,.jpg,.jpeg,.png,.gif,.webp" hidden>
+            <button id="upload-file-btn" class="btn btn-ghost btn-sm file-upload-btn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              Upload file
+            </button>
+            <span id="upload-status" class="upload-status"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading overlay -->
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
