@@ -221,18 +221,133 @@ function setResponseHtml(el, html, rawText, onSave) {
   ensureCopyButton(el);
 }
 
+async function sendProductDesc(sourceText, gptBtn) {
+  gptBtn.disabled = true;
+  gptBtn.textContent = 'Opening...';
+  try {
+    await send({ type: 'SEND_TO_CHATGPT', text: sourceText });
+    gptBtn.textContent = 'Sent';
+    setTimeout(() => { gptBtn.textContent = 'Product Desc'; gptBtn.disabled = false; }, 3000);
+  } catch (e) {
+    gptBtn.textContent = 'Error';
+    setTimeout(() => { gptBtn.textContent = 'Product Desc'; gptBtn.disabled = false; }, 3000);
+  }
+}
+
+function addGeminiActionsToResponse(msgEl, getText) {
+  const msgActions = responseActionsRow(msgEl);
+  if (msgActions.querySelector('.notebook-gemini-action')) return;
+
+  const bulletsBtn = document.createElement('button');
+  bulletsBtn.className = 'btn btn-gem btn-sm notebook-gemini-action';
+  bulletsBtn.textContent = '✦ Bullet Points';
+
+  const imageBtn = document.createElement('button');
+  imageBtn.className = 'btn btn-gem btn-sm notebook-gemini-action';
+  imageBtn.textContent = '✦ Image Prompt';
+
+  const msgEditBtn = msgActions.querySelector('.msg-edit-btn');
+  msgActions.insertBefore(bulletsBtn, msgEditBtn);
+  msgActions.insertBefore(imageBtn, msgEditBtn);
+
+  const analysisId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  function createResultBlock(kind) {
+    const wrap = document.createElement('div');
+    wrap.className = 'analysis-result-group';
+    wrap.dataset.kind = kind;
+    wrap.dataset.analysisId = analysisId;
+
+    const result = document.createElement('div');
+    result.className = 'msg msg-gemini';
+    wrap.appendChild(result);
+
+    messages.appendChild(wrap);
+    return { wrap, result };
+  }
+
+  function ensureResultBlock(kind) {
+    const existing = messages.querySelector(`.analysis-result-group[data-analysis-id="${analysisId}"][data-kind="${kind}"]`);
+    if (existing) {
+      return { wrap: existing, result: existing.querySelector('.msg-gemini') };
+    }
+    return createResultBlock(kind);
+  }
+
+  async function fireGemini(btn, kind, gemId, label, thinking) {
+    if (msgEl.dataset.editing === 'true') saveResponseEdit(msgEl);
+    const text = (getText() || '').trim();
+    if (!text) return;
+
+    appendMessage('user', label);
+    const { wrap, result } = ensureResultBlock(kind);
+    messages.appendChild(wrap);
+    btn.disabled = true;
+    result.className = 'msg msg-gemini';
+    setTransientResponse(result, `<em class="msg-thinking">${thinking}</em>`);
+    messages.scrollTop = messages.scrollHeight;
+
+    try {
+      const { content } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
+      result.dataset.rawText = content || '';
+      setResponseHtml(
+        result,
+        content ? renderMarkdown(content) : '<em>No response received.</em>',
+        content || 'No response received.',
+        savedText => { result.dataset.rawText = savedText; }
+      );
+
+      if (kind === 'bullets' && content) {
+        const gptActions = responseActionsRow(result);
+        gptActions.querySelector('.btn-gpt')?.remove();
+        const gptBtn = document.createElement('button');
+        gptBtn.className = 'btn btn-gpt btn-sm';
+        gptBtn.textContent = 'Product Desc';
+        gptBtn.addEventListener('click', () => sendProductDesc(result.dataset.rawText || content, gptBtn));
+        gptActions.insertBefore(gptBtn, gptActions.querySelector('.msg-edit-btn'));
+      }
+    } catch (e) {
+      result.className = 'msg msg-error';
+      setTransientResponse(result, `Gemini error: ${escHtml(e.message)}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+      messages.scrollTop = messages.scrollHeight;
+    }
+  }
+
+  bulletsBtn.addEventListener('click', () =>
+    fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', '✦ Bullet Points', 'Creating bullet points...'));
+
+  imageBtn.addEventListener('click', () =>
+    fireGemini(imageBtn, 'image', '6a7373766848', '✦ Image Prompt', 'Generating image prompt...'));
+}
+
 function appendMessage(role, text) {
   const el = document.createElement('div');
   el.className = `msg msg-${role}`;
   if (role === 'ai') {
+    let currentText = text;
     messages.appendChild(el);
-    setResponseHtml(el, renderMarkdown(text), text);
+    setResponseHtml(el, renderMarkdown(text), text, savedText => { currentText = savedText; });
+    addGeminiActionsToResponse(el, () => currentText);
   } else {
     el.textContent = text;
     messages.appendChild(el);
   }
   messages.scrollTop = messages.scrollHeight;
   return el;
+}
+
+function renderConversationTurns(turns) {
+  messages.innerHTML = '';
+  if (!Array.isArray(turns) || turns.length === 0) return;
+
+  for (const turn of turns) {
+    if (!turn.text) continue;
+    const role = turn.role === 'user' ? 'user' : 'ai';
+    appendMessage(role, turn.text);
+  }
 }
 
 function appendAnalysisMessage(rawText) {
@@ -608,9 +723,19 @@ async function selectNotebook(id) {
 
   showLoading(true, 'Loading notebook...');
   try {
-    const { sources } = await send({ type: 'GET_NOTEBOOK', notebookId: id });
+    const [{ sources }, conversationResult] = await Promise.all([
+      send({ type: 'GET_NOTEBOOK', notebookId: id }),
+      send({ type: 'GET_NOTEBOOK_CONVERSATIONS', notebookId: id, limit: 100 }).catch(() => ({ conversations: [] })),
+    ]);
+    if (state.selectedNotebookId !== id) return;
+
     state.sources = sources;
     renderSources(sources);
+
+    const conversations = conversationResult.conversations || [];
+    const latestConversation = conversations.find(conv => conv.turns?.length) || conversations[0];
+    state.conversationId = latestConversation?.id || null;
+    renderConversationTurns(latestConversation?.turns || []);
   } catch (e) {
     console.error('Failed to load notebook:', e);
   } finally {
@@ -992,8 +1117,24 @@ document.addEventListener('keydown', e => {
 
 refreshNbs.addEventListener('click', async () => {
   refreshNbs.disabled = true;
-  try { await loadNotebooks(); } catch {}
-  refreshNbs.disabled = false;
+  refreshNbs.classList.add('is-refreshing');
+
+  try {
+    await send({ type: 'REFRESH_SESSIONS' });
+    await loadNotebooks();
+
+    if (state.selectedNotebookId) {
+      await selectNotebook(state.selectedNotebookId);
+    } else {
+      await selectNotebook('');
+    }
+  } catch {
+    authError.classList.remove('hidden');
+    mainScreen.classList.add('hidden');
+  } finally {
+    refreshNbs.disabled = false;
+    refreshNbs.classList.remove('is-refreshing');
+  }
 });
 
 sendBtn.addEventListener('click', sendQuery);

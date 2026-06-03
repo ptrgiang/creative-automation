@@ -18,6 +18,7 @@ const RPC = {
   RENAME_NOTEBOOK:  's0tc2d',
   DELETE_NOTEBOOK:  'WWINqb',
   GET_CONVERSATIONS:'hPTbtc',
+  GET_CONVERSATION_TURNS:'khqZz',
   ADD_SOURCE_V1:    'izAoDd',
   ADD_SOURCE_V2:    'ozz5Z',
   ADD_SOURCE_FILE:  'o4cbdc',
@@ -29,6 +30,7 @@ let authState = {
   csrfToken: '',
   sessionId: '',
   buildLabel: '',
+  email: '',
   lastFetched: 0,
 };
 
@@ -115,6 +117,17 @@ async function getAuth() {
     await fetchAuthFromPage();
   }
   return authState;
+}
+
+function resetNotebookAuth() {
+  authState = {
+    csrfToken: '',
+    sessionId: '',
+    buildLabel: '',
+    email: '',
+    lastFetched: 0,
+  };
+  conversationCache = {};
 }
 
 // ─── batchexecute protocol ───────────────────────────────────────────────────
@@ -345,18 +358,183 @@ function parseQueryResponse(text) {
   };
 }
 
+function cleanConversationText(value) {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/\u0000/g, '')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function looksLikeConversationId(value) {
+  return typeof value === 'string' &&
+    value.length >= 10 &&
+    value.length <= 120 &&
+    /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+function extractFirstConversationId(node) {
+  if (looksLikeConversationId(node)) return node;
+  if (!Array.isArray(node)) return null;
+
+  for (const item of node) {
+    const found = extractFirstConversationId(item);
+    if (found) return found;
+  }
+  return null;
+}
+
+function extractConversationTurns(node, turns = []) {
+  if (!Array.isArray(node)) return turns;
+
+  const text = cleanConversationText(node[0]);
+  const roleCode = node[2];
+  if (text && (roleCode === 1 || roleCode === 2)) {
+    const role = roleCode === 1 ? 'user' : 'ai';
+    const prev = turns[turns.length - 1];
+    if (!prev || prev.role !== role || prev.text !== text) {
+      turns.push({ role, text });
+    }
+    return turns;
+  }
+
+  for (const item of node) {
+    extractConversationTurns(item, turns);
+  }
+  return turns;
+}
+
+function normalizeConversationRecords(result) {
+  if (!Array.isArray(result)) return [];
+  if (Array.isArray(result[0])) {
+    if (typeof result[0][0] === 'string') return result;
+    return result[0];
+  }
+  return result;
+}
+
+function cacheConversationTurns(conversationId, turns) {
+  if (!conversationId || !Array.isArray(turns) || turns.length === 0) return;
+
+  const pairs = [];
+  let query = '';
+  for (const turn of turns) {
+    if (turn.role === 'user') {
+      query = turn.text;
+    } else if (turn.role === 'ai' && turn.text) {
+      pairs.push({ query, answer: turn.text });
+      query = '';
+    }
+  }
+
+  if (pairs.length > 0) {
+    conversationCache[conversationId] = pairs.slice(-20);
+  }
+}
+
+function parseNotebookConversations(result) {
+  const records = normalizeConversationRecords(result);
+  const conversations = [];
+  const seen = new Set();
+
+  for (const record of records) {
+    const id = extractFirstConversationId(record);
+    const turns = extractConversationTurns(record, []).slice(-40);
+    if (!id && turns.length === 0) continue;
+
+    const key = id || JSON.stringify(turns.slice(0, 2));
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    if (id) cacheConversationTurns(id, turns);
+    conversations.push({ id: id || '', turns });
+  }
+
+  return conversations;
+}
+
+function isConversationTurn(value) {
+  return Array.isArray(value) && (value[2] === 1 || value[2] === 2);
+}
+
+function extractFirstString(node) {
+  if (typeof node === 'string') return cleanConversationText(node);
+  if (!Array.isArray(node)) return '';
+
+  for (const item of node) {
+    const found = extractFirstString(item);
+    if (found) return found;
+  }
+  return '';
+}
+
+function parseConversationTurnsResponse(result) {
+  const rawTurns = isConversationTurn(result?.[0])
+    ? result
+    : (Array.isArray(result?.[0]) ? result[0] : (Array.isArray(result) ? result : []));
+  const turns = [];
+
+  for (const turn of rawTurns) {
+    if (!Array.isArray(turn)) continue;
+
+    if (turn[2] === 1) {
+      const text = cleanConversationText(turn[3]);
+      if (text) turns.push({ role: 'user', text });
+      continue;
+    }
+
+    if (turn[2] === 2) {
+      const text = extractFirstString(turn[4]);
+      if (text) turns.push({ role: 'ai', text });
+    }
+  }
+
+  return turns.reverse();
+}
+
+async function getLatestConversationId(notebookId) {
+  const result = await callRpc(
+    RPC.GET_CONVERSATIONS,
+    [[], null, notebookId, 1],
+    `/notebook/${notebookId}`
+  );
+
+  return extractFirstConversationId(result);
+}
+
+async function getConversationTurns(notebookId, conversationId, limit = 100) {
+  const result = await callRpc(
+    RPC.GET_CONVERSATION_TURNS,
+    [[], null, null, conversationId, limit],
+    `/notebook/${notebookId}`
+  );
+  return parseConversationTurnsResponse(result);
+}
+
+async function getNotebookConversations(notebookId, limit = 100) {
+  const conversationId = await getLatestConversationId(notebookId);
+  if (!conversationId) return [];
+
+  try {
+    const turns = await getConversationTurns(notebookId, conversationId, limit);
+    cacheConversationTurns(conversationId, turns);
+    return [{ id: conversationId, turns }];
+  } catch (e) {
+    console.warn('Failed to fetch NotebookLM conversation turns:', e.message || e);
+  }
+
+  const result = await callRpc(
+    RPC.GET_CONVERSATIONS,
+    [[], null, notebookId, 1],
+    `/notebook/${notebookId}`
+  );
+  return parseNotebookConversations(result);
+}
+
 async function getConversationId(notebookId) {
   try {
-    const result = await callRpc(
-      RPC.GET_CONVERSATIONS,
-      [[], null, notebookId, 20],
-      `/notebook/${notebookId}`
-    );
-    if (Array.isArray(result) && Array.isArray(result[0])) {
-      const l1 = result[0][0];
-      if (typeof l1 === 'string') return l1;
-      if (Array.isArray(l1) && typeof l1[0] === 'string') return l1[0];
-    }
+    return await getLatestConversationId(notebookId);
   } catch {}
   return null;
 }
@@ -467,6 +645,14 @@ let geminiAuth = {
   lastFetched: 0,
 };
 
+function resetGeminiAuth() {
+  geminiAuth = {
+    SNlM0e: '', bl: '',
+    conversationId: '', responseId: '', choiceId: '',
+    lastFetched: 0,
+  };
+}
+
 async function fetchGeminiPage() {
   const resp = await fetch(GEM_URL, {
     credentials: 'include',
@@ -492,6 +678,34 @@ async function getGeminiAuth() {
     await fetchGeminiPage();
   }
   return geminiAuth;
+}
+
+async function refreshExternalSessions() {
+  resetNotebookAuth();
+  resetGeminiAuth();
+
+  const result = {
+    ok: false,
+    notebook: { ok: false, reason: '' },
+    gemini: { ok: false, reason: '' },
+  };
+
+  try {
+    const auth = await fetchAuthFromPage();
+    result.notebook = { ok: true, email: auth.email || '' };
+  } catch (e) {
+    result.notebook = { ok: false, reason: e.message || String(e) };
+  }
+
+  try {
+    await fetchGeminiPage();
+    result.gemini = { ok: true, reason: '' };
+  } catch (e) {
+    result.gemini = { ok: false, reason: e.message || String(e) };
+  }
+
+  result.ok = result.notebook.ok;
+  return result;
 }
 
 function stripForGemini(text) {
@@ -950,6 +1164,10 @@ async function handleMessage(msg) {
       }
     }
 
+    case 'REFRESH_SESSIONS': {
+      return await refreshExternalSessions();
+    }
+
     case 'GET_ACCOUNTS': {
       const [accounts, auth] = await Promise.all([
         fetchGoogleAccounts(),
@@ -1038,6 +1256,11 @@ async function handleMessage(msg) {
       const nbData = await getNotebook(msg.notebookId);
       const sources = extractSources(nbData);
       return { sources };
+    }
+
+    case 'GET_NOTEBOOK_CONVERSATIONS': {
+      const conversations = await getNotebookConversations(msg.notebookId, msg.limit || 20);
+      return { conversations };
     }
 
     case 'QUERY': {
