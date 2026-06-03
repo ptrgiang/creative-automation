@@ -117,15 +117,19 @@
         <div id="messages" class="messages"></div>
         <div class="chat-footer">
           <div class="input-row">
+            <button id="clear-chat" class="inline-tool-btn" title="Clear chat" aria-label="Clear chat">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M8 6V4h8v2M6 6l1 16h10l1-16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
             <textarea id="query-input" placeholder="Ask your notebook…" rows="1"></textarea>
             <button id="send-btn" class="send-btn" disabled aria-label="Send message">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
-          </div>
-          <div class="chat-actions">
-            <button id="clear-chat" class="btn btn-ghost btn-sm">Clear chat</button>
           </div>
         </div>
       </div>
@@ -135,21 +139,22 @@
         <div id="sources-list" class="sources-list"></div>
         <div class="source-add">
           <div class="source-url-row">
-            <input id="source-url" type="url" placeholder="https://…  or YouTube URL">
-            <button id="add-source-btn" class="btn btn-primary btn-sm">Add URL</button>
-          </div>
-          <div class="source-file-row">
             <input id="file-input" type="file" accept=".pdf,.txt,.md,.docx,.csv,.epub,.mp3,.m4a,.wav,.aac,.ogg,.mp4,.jpg,.jpeg,.png,.gif,.webp" hidden>
-            <button id="upload-file-btn" class="btn btn-ghost btn-sm file-upload-btn">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <button id="upload-file-btn" class="inline-tool-btn" title="Upload file" aria-label="Upload file">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
-              Upload file
             </button>
-            <span id="upload-status" class="upload-status"></span>
+            <input id="source-url" type="url" placeholder="https://…  or YouTube URL">
+            <button id="add-source-btn" class="send-btn" aria-label="Add URL" title="Add URL">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+              </svg>
+            </button>
           </div>
+          <span id="upload-status" class="upload-status"></span>
         </div>
       </div>
     </div>
