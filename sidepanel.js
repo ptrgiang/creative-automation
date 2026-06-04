@@ -11,6 +11,10 @@ const state = {
   sending: false,
 };
 
+const LOCAL_AUTOMATION_STORAGE_PREFIX = 'creativeAutomation:actions:';
+let localAutomationSequence = 0;
+const localAutomationWriteQueues = new Map();
+
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 
 const $ = id => document.getElementById(id);
@@ -24,6 +28,9 @@ const messages       = $('messages');
 const queryInput     = $('query-input');
 const sendBtn        = $('send-btn');
 const clearChat      = $('clear-chat');
+const confirmDialog  = $('confirm-dialog');
+const confirmOk      = $('confirm-ok');
+const confirmCancel  = $('confirm-cancel');
 const sourcesList    = $('sources-list');
 const sourceUrl      = $('source-url');
 const addSourceBtn   = $('add-source-btn');
@@ -59,11 +66,161 @@ function send(msg) {
   });
 }
 
+function storageGet(key) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(key, result => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve(result?.[key]);
+    });
+  });
+}
+
+function storageSet(items) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(items, () => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve();
+    });
+  });
+}
+
+function storageRemove(key) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.remove(key, () => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve();
+    });
+  });
+}
+
+function localAutomationKey(notebookId) {
+  return `${LOCAL_AUTOMATION_STORAGE_PREFIX}${notebookId}`;
+}
+
+function makeLocalAutomationId() {
+  localAutomationSequence += 1;
+  return `${Date.now()}-${localAutomationSequence}-${Math.random().toString(16).slice(2)}`;
+}
+
+function queueLocalAutomationWrite(notebookId, operation) {
+  const previous = localAutomationWriteQueues.get(notebookId) || Promise.resolve();
+  const next = previous.catch(() => {}).then(operation);
+  const queued = next.finally(() => {
+    if (localAutomationWriteQueues.get(notebookId) === queued) {
+      localAutomationWriteQueues.delete(notebookId);
+    }
+  });
+  localAutomationWriteQueues.set(notebookId, queued);
+  return next;
+}
+
+function normalizeLocalAutomationItem(item) {
+  const notebookId = item.notebookId || state.selectedNotebookId;
+  const createdAt = item.createdAt || Date.now();
+  return {
+    id: item.id || makeLocalAutomationId(),
+    notebookId,
+    createdAt,
+    role: item.role,
+    kind: item.kind || '',
+    status: item.status || 'ok',
+    text: item.text || '',
+    html: item.html || '',
+    copyText: item.copyText || item.text || '',
+    rawText: item.rawText || '',
+  };
+}
+
+async function loadLocalAutomationHistory(notebookId) {
+  if (!notebookId) return [];
+  const items = await storageGet(localAutomationKey(notebookId));
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter(item => item && item.notebookId === notebookId)
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+}
+
+async function saveLocalAutomationItem(item) {
+  const normalized = normalizeLocalAutomationItem(item);
+  if (!normalized.notebookId || !normalized.role) return null;
+
+  return queueLocalAutomationWrite(normalized.notebookId, async () => {
+    const key = localAutomationKey(normalized.notebookId);
+    const items = await loadLocalAutomationHistory(normalized.notebookId);
+    const existingIndex = items.findIndex(saved => saved.id === normalized.id);
+    if (existingIndex >= 0) items[existingIndex] = { ...items[existingIndex], ...normalized };
+    else items.push(normalized);
+    await storageSet({ [key]: items });
+    return normalized;
+  });
+}
+
+async function updateLocalAutomationItem(notebookId, itemId, patch) {
+  if (!notebookId || !itemId) return;
+  return queueLocalAutomationWrite(notebookId, async () => {
+    const key = localAutomationKey(notebookId);
+    const items = await loadLocalAutomationHistory(notebookId);
+    const index = items.findIndex(item => item.id === itemId);
+    if (index < 0) return;
+    items[index] = { ...items[index], ...patch };
+    await storageSet({ [key]: items });
+  });
+}
+
+async function clearLocalAutomationHistory(notebookId) {
+  if (!notebookId) return;
+  return queueLocalAutomationWrite(notebookId, () => storageRemove(localAutomationKey(notebookId)));
+}
+
+function showLocalAutomationStorageError(error) {
+  appendMessage('error', `Could not save local automation history: ${error.message || error}`);
+}
+
+function persistLocalAutomationItem(item) {
+  return saveLocalAutomationItem(item).catch(showLocalAutomationStorageError);
+}
+
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
 function showLoading(on, label = 'Loading workspace...') {
   if (loadingLabel) loadingLabel.textContent = label;
   loading.classList.toggle('hidden', !on);
+}
+
+function requestClearLocalHistoryConfirmation() {
+  const previousFocus = document.activeElement;
+  confirmDialog.classList.remove('hidden');
+  confirmCancel.focus();
+
+  return new Promise(resolve => {
+    let settled = false;
+
+    function close(confirmed) {
+      if (settled) return;
+      settled = true;
+      confirmDialog.classList.add('hidden');
+      confirmOk.removeEventListener('click', onConfirm);
+      confirmCancel.removeEventListener('click', onCancel);
+      confirmDialog.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeyDown);
+      if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
+      resolve(confirmed);
+    }
+
+    function onConfirm() { close(true); }
+    function onCancel() { close(false); }
+    function onOverlayClick(e) {
+      if (e.target === confirmDialog) close(false);
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') close(false);
+    }
+
+    confirmOk.addEventListener('click', onConfirm);
+    confirmCancel.addEventListener('click', onCancel);
+    confirmDialog.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeyDown);
+  });
 }
 
 function messageBody(el) {
@@ -150,6 +307,14 @@ function saveResponseEdit(el) {
   delete el.dataset.editing;
   setIconButtonState(btn, 'edit');
   setResponseHtml(el, nextHtml, nextText, el._responseOnSave);
+  if (el.dataset.localAutomationId && el.dataset.localAutomationNotebookId) {
+    updateLocalAutomationItem(el.dataset.localAutomationNotebookId, el.dataset.localAutomationId, {
+      text: nextText,
+      html: nextHtml,
+      copyText: nextText,
+      rawText: nextText,
+    }).catch(showLocalAutomationStorageError);
+  }
   el._responseOnSave?.(nextText, nextHtml);
 }
 
@@ -226,7 +391,7 @@ async function sendProductDesc(sourceText, gptBtn) {
     gptBtn.disabled = true;
     setActionIconState(gptBtn, 'loading', 'Opening Product Description');
   }
-  appendMessage('user', 'Product Description');
+  appendLocalAutomationUser('product', 'Product Description');
   const result = document.createElement('div');
   result.className = 'msg msg-gemini';
   messages.appendChild(result);
@@ -242,6 +407,13 @@ async function sendProductDesc(sourceText, gptBtn) {
       `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
       `Sent: ${url}`
     );
+    saveLocalAutomationResponse(
+      result,
+      'product',
+      `Sent: ${url}`,
+      `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
+      { rawText: sourceText }
+    );
     if (gptBtn) {
       setActionIconState(gptBtn, 'done', 'Product Description sent');
       setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
@@ -249,6 +421,13 @@ async function sendProductDesc(sourceText, gptBtn) {
   } catch (e) {
     result.className = 'msg msg-error';
     setTransientResponse(result, `Product Description error: ${escHtml(e.message)}`);
+    saveLocalAutomationResponse(
+      result,
+      'product',
+      `Product Description error: ${e.message}`,
+      `Product Description error: ${escHtml(e.message)}`,
+      { rawText: sourceText, status: 'error' }
+    );
     if (gptBtn) {
       setActionIconState(gptBtn, 'error', 'Product Description error');
       setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
@@ -319,13 +498,62 @@ function createActionIconButton(kind, label, extraClass = '') {
   return btn;
 }
 
+function tagLocalAutomationElement(el, item) {
+  if (!el || !item) return;
+  el.dataset.localAutomationId = item.id;
+  el.dataset.localAutomationNotebookId = item.notebookId;
+  el.dataset.localAutomationKind = item.kind || '';
+}
+
+function appendLocalAutomationUser(kind, text) {
+  const notebookId = state.selectedNotebookId;
+  const item = normalizeLocalAutomationItem({
+    notebookId,
+    role: 'user',
+    kind,
+    text,
+    copyText: text,
+  });
+  const el = appendMessage('user', text);
+  tagLocalAutomationElement(el, item);
+  persistLocalAutomationItem(item);
+  return { el, item };
+}
+
+function saveLocalAutomationResponse(el, kind, text, html, options = {}) {
+  const notebookId = options.notebookId || state.selectedNotebookId;
+  const item = normalizeLocalAutomationItem({
+    id: options.id,
+    notebookId,
+    role: 'response',
+    kind,
+    status: options.status || 'ok',
+    text,
+    html,
+    copyText: options.copyText || text,
+    rawText: options.rawText || text,
+  });
+  tagLocalAutomationElement(el, item);
+  persistLocalAutomationItem(item);
+  return item;
+}
+
+function attachProductDescriptionAction(result, sourceText, sendFn = sendProductDesc) {
+  const gptActions = responseActionsRow(result);
+  gptActions.querySelector('.btn-gpt')?.remove();
+  const gptBtn = createActionIconButton('product', 'Product Description', 'btn-gpt');
+  gptBtn.addEventListener('click', () => sendFn(result.dataset.rawText || sourceText, gptBtn));
+  gptActions.insertBefore(gptBtn, gptActions.querySelector('.msg-edit-btn'));
+  return gptBtn;
+}
+
 function addGeminiActionsToResponse(msgEl, getText) {
   const msgActions = responseActionsRow(msgEl);
   if (msgActions.querySelector('.notebook-gemini-action')) return;
 
   const bulletsBtn = createActionIconButton('bullets', 'Bullet Points', 'btn-gem notebook-gemini-action');
   const imageBtn = createActionIconButton('image', 'Image Prompt', 'btn-gem notebook-gemini-action');
-  const comboBtn = createActionIconButton('combo', 'Run Bullet Points, Image Prompt, and Product Description', 'btn-gem notebook-gemini-action');
+  const comboBtn = createActionIconButton('combo', 'Run: Bullet Points → Image Prompt → Product Description', 'btn-gem notebook-gemini-action');
 
   const msgEditBtn = msgActions.querySelector('.msg-edit-btn');
   msgActions.insertBefore(bulletsBtn, msgEditBtn);
@@ -354,7 +582,7 @@ function addGeminiActionsToResponse(msgEl, getText) {
     const text = (getText() || '').trim();
     if (!text) return '';
 
-    appendMessage('user', actionLabel);
+    appendLocalAutomationUser(kind, actionLabel);
     const { wrap, result } = createResultBlock(kind);
     messages.appendChild(wrap);
     btn.disabled = true;
@@ -372,18 +600,28 @@ function addGeminiActionsToResponse(msgEl, getText) {
         content || 'No response received.',
         savedText => { result.dataset.rawText = savedText; }
       );
+      saveLocalAutomationResponse(
+        result,
+        kind,
+        content || 'No response received.',
+        content ? renderMarkdown(content) : '<em>No response received.</em>',
+        { rawText: content || '' }
+      );
 
       if (kind === 'bullets' && content) {
-        const gptActions = responseActionsRow(result);
-        gptActions.querySelector('.btn-gpt')?.remove();
-        const gptBtn = createActionIconButton('product', 'Product Description', 'btn-gpt');
-        gptBtn.addEventListener('click', () => sendProductDesc(result.dataset.rawText || content, gptBtn));
-        gptActions.insertBefore(gptBtn, gptActions.querySelector('.msg-edit-btn'));
+        attachProductDescriptionAction(result, content);
       }
       return responseText;
     } catch (e) {
       result.className = 'msg msg-error';
       setTransientResponse(result, `Gemini error: ${escHtml(e.message)}`);
+      saveLocalAutomationResponse(
+        result,
+        kind,
+        `Gemini error: ${e.message}`,
+        `Gemini error: ${escHtml(e.message)}`,
+        { status: 'error' }
+      );
       return '';
     } finally {
       btn.disabled = false;
@@ -406,7 +644,7 @@ function addGeminiActionsToResponse(msgEl, getText) {
       if (bulletText) await sendProductDesc(bulletText);
     } finally {
       comboBtn.disabled = false;
-      setActionIconState(comboBtn, 'combo', 'Run Bullet Points, Image Prompt, and Product Description');
+      setActionIconState(comboBtn, 'combo', 'Run: Bullet Points → Image Prompt → Product Description');
     }
   });
 }
@@ -438,6 +676,52 @@ function renderConversationTurns(turns) {
   }
 }
 
+function appendSavedLocalAutomationItem(item) {
+  if (item.role === 'user') {
+    const el = appendMessage('user', item.text || '');
+    tagLocalAutomationElement(el, item);
+    return el;
+  }
+
+  if (item.role !== 'response') return null;
+
+  const el = document.createElement('div');
+  el.className = item.status === 'error' ? 'msg msg-error' : 'msg msg-gemini';
+  messages.appendChild(el);
+  tagLocalAutomationElement(el, item);
+
+  if (item.status === 'error') {
+    messageBody(el).innerHTML = item.html || escHtml(item.text || '');
+    messages.scrollTop = messages.scrollHeight;
+    return el;
+  }
+
+  el.dataset.rawText = item.rawText || item.copyText || item.text || '';
+  setResponseHtml(
+    el,
+    item.html || renderMarkdown(item.text || ''),
+    item.copyText || item.text || '',
+    savedText => { el.dataset.rawText = savedText; }
+  );
+  tagLocalAutomationElement(el, item);
+
+  if (item.kind === 'bullets') {
+    attachProductDescriptionAction(el, item.rawText || item.copyText || item.text || '');
+  }
+  messages.scrollTop = messages.scrollHeight;
+  return el;
+}
+
+async function renderLocalAutomationHistory(notebookId) {
+  try {
+    const items = await loadLocalAutomationHistory(notebookId);
+    if (state.selectedNotebookId !== notebookId) return;
+    for (const item of items) appendSavedLocalAutomationItem(item);
+  } catch (e) {
+    appendMessage('error', `Could not load local automation history: ${e.message}`);
+  }
+}
+
 function appendAnalysisMessage(rawText) {
   const msgEl = document.createElement('div');
   msgEl.className = 'msg msg-ai';
@@ -447,7 +731,7 @@ function appendAnalysisMessage(rawText) {
 
   const bulletsBtn = createActionIconButton('bullets', 'Bullet Points', 'btn-gem');
   const imageBtn = createActionIconButton('image', 'Image Prompt', 'btn-gem');
-  const comboBtn = createActionIconButton('combo', 'Run Bullet Points, Image Prompt, and Product Description', 'btn-gem');
+  const comboBtn = createActionIconButton('combo', 'Run: Bullet Points → Image Prompt → Product Description', 'btn-gem');
 
   const msgActions = responseActionsRow(msgEl);
   const msgEditBtn = msgActions.querySelector('.msg-edit-btn');
@@ -458,7 +742,8 @@ function appendAnalysisMessage(rawText) {
   const analysisId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   function appendSelection(label) {
-    appendMessage('user', label);
+    const kind = label === 'Bullet Points' ? 'bullets' : label === 'Image Prompt' ? 'image' : 'automation';
+    appendLocalAutomationUser(kind, label);
   }
 
   function createResultBlock(kind) {
@@ -478,7 +763,7 @@ function appendAnalysisMessage(rawText) {
   async function sendProductDesc(sourceText, gptBtn) {
     gptBtn.disabled = true;
     setActionIconState(gptBtn, 'loading', 'Opening Product Description');
-    appendMessage('user', 'Product Description');
+    appendLocalAutomationUser('product', 'Product Description');
     const result = document.createElement('div');
     result.className = 'msg msg-gemini';
     messages.appendChild(result);
@@ -494,11 +779,25 @@ function appendAnalysisMessage(rawText) {
         `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
         `Sent: ${url}`
       );
+      saveLocalAutomationResponse(
+        result,
+        'product',
+        `Sent: ${url}`,
+        `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
+        { rawText: sourceText }
+      );
       setActionIconState(gptBtn, 'done', 'Product Description sent');
       setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
     } catch (e) {
       result.className = 'msg msg-error';
       setTransientResponse(result, `Product Description error: ${escHtml(e.message)}`);
+      saveLocalAutomationResponse(
+        result,
+        'product',
+        `Product Description error: ${e.message}`,
+        `Product Description error: ${escHtml(e.message)}`,
+        { rawText: sourceText, status: 'error' }
+      );
       setActionIconState(gptBtn, 'error', 'Product Description error');
       setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
     }
@@ -526,18 +825,28 @@ function appendAnalysisMessage(rawText) {
         content || 'No response received.',
         savedText => { result.dataset.rawText = savedText; }
       );
+      saveLocalAutomationResponse(
+        result,
+        kind,
+        content || 'No response received.',
+        content ? renderMarkdown(content) : '<em>No response received.</em>',
+        { rawText: content || '' }
+      );
 
       if (kind === 'bullets' && content) {
-        const gptActions = responseActionsRow(result);
-        gptActions.querySelector('.btn-gpt')?.remove();
-        const gptBtn = createActionIconButton('product', 'Product Description', 'btn-gpt');
-        gptBtn.addEventListener('click', () => sendProductDesc(result.dataset.rawText || content, gptBtn));
-        gptActions.insertBefore(gptBtn, gptActions.querySelector('.msg-edit-btn'));
+        attachProductDescriptionAction(result, content, sendProductDesc);
       }
       return responseText;
     } catch (e) {
       result.className = 'msg msg-error';
       setTransientResponse(result, `Gemini error: ${escHtml(e.message)}`);
+      saveLocalAutomationResponse(
+        result,
+        kind,
+        `Gemini error: ${e.message}`,
+        `Gemini error: ${escHtml(e.message)}`,
+        { status: 'error' }
+      );
       return '';
     } finally {
       btn.disabled = false;
@@ -561,7 +870,7 @@ function appendAnalysisMessage(rawText) {
       if (bulletText) await sendProductDesc(bulletText);
     } finally {
       comboBtn.disabled = false;
-      setActionIconState(comboBtn, 'combo', 'Run Bullet Points, Image Prompt, and Product Description');
+      setActionIconState(comboBtn, 'combo', 'Run: Bullet Points → Image Prompt → Product Description');
     }
   });
 
@@ -583,6 +892,28 @@ function appendThinking() {
 
 function removeEl(el) {
   el?.parentNode?.removeChild(el);
+}
+
+function removeLocalAutomationElements() {
+  const localEls = Array.from(messages.querySelectorAll('[data-local-automation-id]'));
+  const removedGroups = new Set();
+  for (const el of localEls) {
+    const group = el.closest('.analysis-result-group');
+    if (group) {
+      if (removedGroups.has(group)) continue;
+      removedGroups.add(group);
+      const actionRow = group.nextElementSibling;
+      if (actionRow?.classList.contains('msg-actions-row')) actionRow.remove();
+      group.remove();
+      continue;
+    }
+
+    const actionRow = el.nextElementSibling;
+    if (actionRow?.classList.contains('msg-actions-row') && actionRow.dataset.forMessage === el.dataset.messageId) {
+      actionRow.remove();
+    }
+    el.remove();
+  }
 }
 
 function showTab(tabId) {
@@ -857,6 +1188,7 @@ async function selectNotebook(id) {
     const latestConversation = conversations.find(conv => conv.turns?.length) || conversations[0];
     state.conversationId = latestConversation?.id || null;
     renderConversationTurns(latestConversation?.turns || []);
+    await renderLocalAutomationHistory(id);
   } catch (e) {
     console.error('Failed to load notebook:', e);
   } finally {
@@ -1265,11 +1597,16 @@ queryInput.addEventListener('keydown', e => {
 });
 
 clearChat.addEventListener('click', async () => {
-  if (state.conversationId) {
-    await send({ type: 'CLEAR_HISTORY', conversationId: state.conversationId }).catch(() => {});
+  if (!state.selectedNotebookId) return;
+  const confirmed = await requestClearLocalHistoryConfirmation();
+  if (!confirmed) return;
+
+  try {
+    await clearLocalAutomationHistory(state.selectedNotebookId);
+    removeLocalAutomationElements();
+  } catch (e) {
+    appendMessage('error', `Could not clear local automation history: ${e.message}`);
   }
-  state.conversationId = null;
-  messages.innerHTML = '';
 });
 
 document.querySelectorAll('.tab').forEach(btn => {

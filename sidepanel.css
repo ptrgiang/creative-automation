@@ -1134,6 +1134,119 @@ input[type="url"] {
   box-shadow: 0 0 0 3px rgba(255, 243, 93, 0.5);
 }
 
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 243, 93, 0.16), transparent 34%),
+    rgba(11, 11, 10, 0.38);
+  backdrop-filter: blur(7px);
+}
+
+.confirm-card {
+  position: relative;
+  overflow: hidden;
+  width: min(100%, 306px);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 12px;
+  padding: 14px;
+  background: linear-gradient(180deg, #fffef9 0%, var(--surface-strong) 100%);
+  border: 1px solid rgba(11, 11, 10, 0.14);
+  border-radius: var(--radius);
+  color: var(--ink);
+  box-shadow: 0 20px 44px rgba(11, 11, 10, 0.22), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.confirm-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--accent);
+  border-bottom: 1px solid rgba(11, 11, 10, 0.08);
+}
+
+.confirm-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--ink);
+  border: 1px solid rgba(11, 11, 10, 0.12);
+  box-shadow: 0 5px 0 rgba(11, 11, 10, 0.08);
+  margin-top: 2px;
+}
+
+.confirm-content {
+  min-width: 0;
+  padding-right: 2px;
+}
+
+.confirm-content h2 {
+  margin: 0 0 5px;
+  font-family: var(--brand-font);
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 800;
+}
+
+.confirm-content p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.confirm-actions .btn {
+  min-width: 76px;
+  height: 32px;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-family: var(--brand-font);
+  font-size: 12px;
+}
+
+.confirm-actions .btn-ghost {
+  background: var(--chip);
+  border-color: rgba(11, 11, 10, 0.09);
+  color: var(--ink);
+}
+
+.confirm-actions .btn-ghost:hover:not(:disabled) {
+  background: var(--chip-hover);
+  border-color: #e4d64a;
+}
+
+.confirm-primary {
+  background: var(--ink);
+  color: var(--surface-strong);
+  border-color: var(--ink);
+  box-shadow: 0 6px 14px rgba(11, 11, 10, 0.16);
+}
+
+.confirm-primary:hover:not(:disabled) {
+  background: #1d1d1a;
+  color: var(--accent);
+  border-color: #1d1d1a;
+}
+
 .msg-gemini {
   align-self: flex-start;
   max-width: 92%;
