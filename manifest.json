@@ -6,6 +6,7 @@
   "permissions": ["cookies", "storage", "sidePanel", "tabs", "scripting"],
   "host_permissions": [
     "https://notebooklm.google.com/*",
+    "https://google.com/*",
     "https://*.google.com/*",
     "https://amazon-crawler.netlify.app/*",
     "https://amazon-api.bluestars.vn/*",

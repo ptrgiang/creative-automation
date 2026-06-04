@@ -10,6 +10,9 @@ const state = {
   conversationId: null,
   sending: false,
   addingSource: false,
+  accounts: [],
+  selectedAuthUser: 0,
+  selectedAccountEmail: '',
 };
 
 const LOCAL_AUTOMATION_STORAGE_PREFIX = 'creativeAutomation:actions:';
@@ -42,6 +45,10 @@ const loading        = $('loading');
 const loadingLabel   = $('loading-label');
 const retryAuth      = $('retry-auth');
 const refreshNbs     = $('refresh-notebooks');
+const accountPicker = $('account-picker');
+const accountPickerButton = $('account-picker-button');
+const accountPickerLabel = $('account-picker-label');
+const accountPickerMenu = $('account-picker-menu');
 const createNbBtn    = $('create-notebook');
 const renameNbBtn    = $('rename-notebook');
 const notebookPickerButton = $('notebook-picker-button');
@@ -1099,6 +1106,106 @@ function updateNotebookPickerLabel() {
   notebookPickerCount.textContent = formatSourceCount(selected.sourceCount);
 }
 
+function accountInitial(account) {
+  const source = account?.email || account?.name || 'G';
+  return source.trim().charAt(0).toUpperCase() || 'G';
+}
+
+function accountAvatarMarkup(account) {
+  const initial = escHtml(accountInitial(account));
+  if (account?.photoUrl) {
+    return `<span class="account-avatar account-avatar-photo"><img src="${escHtml(account.photoUrl)}" alt="" referrerpolicy="no-referrer"><span>${initial}</span></span>`;
+  }
+  return `<span class="account-avatar">${initial}</span>`;
+}
+
+function updateAccountPickerLabel() {
+  const selected = state.accounts.find(a => a.index === state.selectedAuthUser) || state.accounts[0];
+  accountPickerLabel.innerHTML = selected?.photoUrl
+    ? `<img src="${escHtml(selected.photoUrl)}" alt="" referrerpolicy="no-referrer"><span>${escHtml(accountInitial(selected))}</span>`
+    : selected
+      ? `<span>${escHtml(accountInitial(selected))}</span>`
+      : `<svg class="account-notebook-icon" width="18" height="14" viewBox="0 1.14 174.56 127.99" fill="currentColor" aria-hidden="true">
+          <path d="M87.27,1.14C39.07,1.14,0,39.88,0,87.69v41.44h16.09v-4.13c0-19.39,15.84-35.11,35.39-35.11s35.39,15.72,35.39,35.11v4.13h16.09v-4.13c0-28.2-23.05-51.05-51.48-51.05-11.07,0-21.32,3.46-29.72,9.37,8.79-17.32,26.88-29.21,47.77-29.21,29.51,0,53.44,23.74,53.44,53v22.02h16.09v-22.02c0-38.08-31.13-68.96-69.53-68.96-17.27,0-33.06,6.24-45.22,16.58,11.94-22.39,35.65-37.64,62.97-37.64,39.32,0,71.19,31.61,71.19,70.6v41.44h16.09v-41.44C174.55,39.88,135.48,1.14,87.27,1.14Z"/>
+        </svg>`;
+  accountPickerLabel.classList.toggle('account-picker-label-photo', !!selected?.photoUrl);
+  const label = selected?.email
+    ? `Google account: ${selected.email}`
+    : 'Switch Google account';
+  accountPickerButton.title = label;
+  accountPickerButton.setAttribute('aria-label', label);
+}
+
+function renderAccountPicker() {
+  const accounts = state.accounts || [];
+  const rows = accounts.map(account => `
+    <button class="account-picker-option${account.index === state.selectedAuthUser ? ' account-picker-option-active' : ''}" type="button" data-auth-user="${account.index}" data-email="${escHtml(account.email || '')}">
+      ${accountAvatarMarkup(account)}
+      <span class="account-text">
+        <span class="account-name">${escHtml(account.name || account.email || `Google account ${account.index + 1}`)}</span>
+        <span class="account-email">${escHtml(account.email || '')}</span>
+      </span>
+    </button>
+  `);
+  accountPickerMenu.innerHTML = rows.length ? rows.join('') : `
+    <div class="account-picker-empty">
+      <strong>Switch in extension</strong>
+      <span>Open NotebookLM first so Google accounts can be loaded.</span>
+    </div>
+    <a class="account-picker-open account-picker-open-primary" href="https://notebooklm.google.com/" target="_blank" rel="noopener noreferrer">
+      <span>Open NotebookLM</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+  `;
+  accountPickerMenu.querySelectorAll('.account-picker-option').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const index = Number(btn.dataset.authUser);
+      const email = btn.dataset.email || '';
+      closeAccountPicker();
+      await switchGoogleAccount(index, email);
+    });
+  });
+  updateAccountPickerLabel();
+}
+
+async function loadGoogleAccounts() {
+  const result = await send({ type: 'GET_ACCOUNTS' });
+  state.accounts = result.accounts || [];
+  state.selectedAuthUser = Number.isInteger(result.selectedAuthUser) ? result.selectedAuthUser : 0;
+  state.selectedAccountEmail = result.currentEmail || result.selectedEmail || '';
+  renderAccountPicker();
+}
+
+function openAccountPicker() {
+  accountPickerMenu.classList.remove('hidden');
+}
+
+function closeAccountPicker() {
+  accountPickerMenu.classList.add('hidden');
+}
+
+async function switchGoogleAccount(index, email) {
+  if (!Number.isInteger(index)) return;
+  showLoading(true, 'Switching Google account...');
+  try {
+    await send({ type: 'SET_GOOGLE_ACCOUNT', index, email });
+    state.selectedAuthUser = index;
+    state.selectedAccountEmail = email;
+    state.selectedNotebookId = null;
+    state.conversationId = null;
+    messages.innerHTML = '';
+    await loadGoogleAccounts();
+    await loadNotebooks();
+    await selectNotebook('');
+  } catch (e) {
+    appendMessage('error', `Could not switch Google account: ${e.message}`);
+  } finally {
+    showLoading(false);
+  }
+}
+
 function applyNotebookPickerFilter() {
   const query = notebookSearchQuery.trim().toLowerCase();
   let visibleCount = 0;
@@ -1415,7 +1522,7 @@ fileInput.addEventListener('change', async () => {
 
   try {
     // Steps 1 & 2 run in background (need auth/RPC). Returns the upload URL.
-    const { uploadUrl } = await send({
+    const { uploadUrl, authUser = '0' } = await send({
       type: 'PREPARE_FILE_UPLOAD',
       notebookId: state.selectedNotebookId,
       filename: file.name,
@@ -1433,7 +1540,7 @@ fileInput.addEventListener('change', async () => {
         'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
         'Origin': 'https://notebooklm.google.com',
         'Referer': 'https://notebooklm.google.com/',
-        'x-goog-authuser': '0',
+        'x-goog-authuser': String(authUser),
         'x-goog-upload-command': 'upload, finalize',
         'x-goog-upload-offset': '0',
       },
@@ -1604,6 +1711,7 @@ async function init() {
     mainScreen.classList.remove('hidden');
     state.authed = true;
 
+    await loadGoogleAccounts().catch(() => {});
     await loadNotebooks();
     checkAmazonTab().catch(() => {});
   } catch (e) {
@@ -1633,10 +1741,33 @@ notebookPickerMenu.addEventListener('click', e => {
   e.stopPropagation();
 });
 
-document.addEventListener('click', () => closeNotebookPicker());
+accountPickerButton.addEventListener('click', async e => {
+  e.stopPropagation();
+  closeNotebookPicker();
+  if (accountPickerMenu.classList.contains('hidden')) {
+    try {
+      await loadGoogleAccounts();
+    } catch {}
+    openAccountPicker();
+  } else {
+    closeAccountPicker();
+  }
+});
+
+accountPickerMenu.addEventListener('click', e => {
+  e.stopPropagation();
+});
+
+document.addEventListener('click', () => {
+  closeNotebookPicker();
+  closeAccountPicker();
+});
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeNotebookPicker();
+  if (e.key === 'Escape') {
+    closeNotebookPicker();
+    closeAccountPicker();
+  }
 });
 
 refreshNbs.addEventListener('click', async () => {
@@ -1645,6 +1776,7 @@ refreshNbs.addEventListener('click', async () => {
 
   try {
     await send({ type: 'REFRESH_SESSIONS' });
+    await loadGoogleAccounts();
     await loadNotebooks();
 
     if (state.selectedNotebookId) {

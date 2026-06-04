@@ -9,6 +9,7 @@ const BASE_URL = 'https://notebooklm.google.com';
 const BATCHEXECUTE_URL = `${BASE_URL}/_/LabsTailwindUi/data/batchexecute`;
 const QUERY_URL = `${BASE_URL}/_/LabsTailwindUi/data/google.internal.labs.tailwind.orchestration.v1.LabsTailwindOrchestrationService/GenerateFreeFormStreamed`;
 const BL_FALLBACK = 'boq_labs-tailwind-frontend_20260108.06_p0';
+const GOOGLE_ACCOUNT_STORAGE_KEY = 'creativeAutomation:selectedGoogleAccount';
 
 // RPC IDs
 const RPC = {
@@ -31,20 +32,77 @@ let authState = {
   sessionId: '',
   buildLabel: '',
   email: '',
+  authUser: 0,
   lastFetched: 0,
 };
+
+let selectedGoogleAccount = { index: 0, email: '' };
 
 // In-memory conversation cache: { conversationId: [{query, answer}] }
 let conversationCache = {};
 
+function storageGet(key) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(key, result => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve(result?.[key]);
+    });
+  });
+}
+
+function storageSet(items) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(items, () => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve();
+    });
+  });
+}
+
+async function getSelectedGoogleAccount() {
+  const saved = await storageGet(GOOGLE_ACCOUNT_STORAGE_KEY).catch(() => null);
+  const index = Number.isInteger(saved?.index) ? saved.index : 0;
+  selectedGoogleAccount = {
+    index: Math.max(0, index),
+    email: typeof saved?.email === 'string' ? saved.email : '',
+  };
+  return selectedGoogleAccount;
+}
+
+function accountAuthParam(account = selectedGoogleAccount) {
+  return String(account.index);
+}
+
+function accountUrl(url, account = selectedGoogleAccount) {
+  const u = new URL(url);
+  u.searchParams.set('authuser', accountAuthParam(account));
+  return u.toString();
+}
+
+function selectedAuthParam(auth = authState) {
+  return accountAuthParam({
+    index: Number.isInteger(auth.authUser) ? auth.authUser : selectedGoogleAccount.index,
+    email: selectedGoogleAccount.email,
+  });
+}
+
+function googleAuthHeaders(authUser = selectedGoogleAccount.index) {
+  return {
+    'X-Goog-AuthUser': String(authUser),
+    'x-goog-authuser': String(authUser),
+  };
+}
+
 // ─── Auth ───────────────────────────────────────────────────────────────────
 
 async function fetchAuthFromPage() {
-  const resp = await fetch(`${BASE_URL}/`, {
+  const account = await getSelectedGoogleAccount();
+  const resp = await fetch(accountUrl(`${BASE_URL}/`, account), {
     credentials: 'include',
     headers: {
       'Accept': 'text/html,application/xhtml+xml',
       'Accept-Language': 'en-US,en;q=0.9',
+      ...googleAuthHeaders(account.index),
     },
   });
 
@@ -81,6 +139,7 @@ async function fetchAuthFromPage() {
     sessionId:  sessionMatch ? sessionMatch[1]            : '',
     buildLabel: blMatch      ? (blMatch[1] || blMatch[0]) : BL_FALLBACK,
     email,
+    authUser: account.index,
     lastFetched: Date.now(),
   };
 
@@ -88,32 +147,131 @@ async function fetchAuthFromPage() {
 }
 
 async function fetchGoogleAccounts() {
-  try {
-    const resp = await fetch(
-      'https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard',
-      { credentials: 'include' }
-    );
-    if (!resp.ok) return [];
-    let text = await resp.text();
+  function parseAccountsResponse(text) {
     if (text.startsWith(")]}'")) text = text.slice(4);
     const data = JSON.parse(text.trim());
-    // data[1] = array of account entries
     const raw = Array.isArray(data[1]) ? data[1] : [];
-    return raw.map((acc, idx) => ({
-      index: idx,
-      name:     (Array.isArray(acc) && acc[2]) ? acc[2] : '',
-      email:    (Array.isArray(acc) && acc[3]) ? acc[3] : '',
-      photoUrl: (Array.isArray(acc) && acc[4]) ? acc[4] : '',
-    })).filter(a => a.email);
-  } catch {
+    return raw.map((acc, idx) => {
+      if (!Array.isArray(acc)) return null;
+      const authUser = Number.isInteger(acc[7]) ? acc[7] : idx;
+      const fallbackValues = acc.flat(Infinity).filter(v => typeof v === 'string');
+      const email = typeof acc[3] === 'string' && acc[3].includes('@')
+        ? acc[3]
+        : fallbackValues.find(v => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) || '';
+      const name = typeof acc[2] === 'string' && acc[2]
+        ? acc[2]
+        : fallbackValues.find(v => v && v !== email && !v.startsWith('http') && !v.includes('@')) || '';
+      const photoUrl = typeof acc[4] === 'string' && /^https?:\/\//.test(acc[4])
+        ? acc[4]
+        : fallbackValues.find(v => /^https?:\/\//.test(v)) || '';
+      return { index: authUser, name, email, photoUrl };
+    }).filter(a => a.email);
+  }
+
+  function buildListAccountsUrl(authUser) {
+    const params = new URLSearchParams({
+      authuser: String(authUser),
+      listPages: '1',
+      fwput: '10',
+      rdr: '2',
+      pid: '666',
+      gpsia: '1',
+      source: 'ogb',
+      atic: '1',
+      mo: '1',
+      mn: '1',
+      hl: 'en',
+      ts: String(Math.floor(Date.now() / 1000) % 10000),
+    });
+    return `https://accounts.google.com/ListAccounts?${params}`;
+  }
+
+  return await fetchGoogleAccountsFromGooglePage(buildListAccountsUrl(selectedGoogleAccount.index), parseAccountsResponse);
+}
+
+async function findGoogleAccountHostTabs() {
+  const queries = await Promise.all([
+    chrome.tabs.query({ active: true, currentWindow: true }),
+    chrome.tabs.query({ url: 'https://*.google.com/*' }),
+    chrome.tabs.query({ url: 'https://google.com/*' }),
+    chrome.tabs.query({ url: `${BASE_URL}/*` }),
+  ]);
+  const seen = new Set();
+  return queries
+    .flat()
+    .filter(tab => {
+      if (!tab?.id || !tab.url || seen.has(tab.id)) return false;
+      seen.add(tab.id);
+      try {
+        const url = new URL(tab.url);
+        return url.protocol === 'https:' && (
+          url.hostname === 'google.com' ||
+          url.hostname.endsWith('.google.com') ||
+          url.hostname === 'notebooklm.google.com'
+        );
+      } catch {
+        return false;
+      }
+    });
+}
+
+async function fetchGoogleAccountsFromGooglePage(url, parseAccountsResponse) {
+  try {
+    const tabs = await findGoogleAccountHostTabs();
+    if (!tabs.length) return [];
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      for (const tab of tabs) {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames: true },
+          world: 'MAIN',
+          func: async listAccountsUrl => {
+            const host = location.hostname;
+            const isGoogleOrigin = host === 'google.com' || host.endsWith('.google.com');
+            if (!isGoogleOrigin) {
+              return { skipped: true, origin: location.origin };
+            }
+            const resp = await fetch(listAccountsUrl, {
+              method: 'POST',
+              credentials: 'include',
+              headers: {
+                'Accept': '*/*',
+                'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+              },
+              body: '',
+            });
+            return {
+              ok: resp.ok,
+              status: resp.status,
+              text: await resp.text(),
+              origin: location.origin,
+            };
+          },
+          args: [url],
+        });
+
+        const payload = results
+          .map(item => item?.result)
+          .find(result => result && !result.skipped && result.ok && result.text);
+        if (payload?.ok && payload.text) return parseAccountsResponse(payload.text);
+      }
+
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    console.warn('Google page ListAccounts failed: no usable Google frame');
+    return [];
+  } catch (e) {
+    console.warn('Google page ListAccounts error:', e.message || e);
     return [];
   }
 }
 
 async function getAuth() {
+  const account = await getSelectedGoogleAccount();
   // Refresh if stale (> 30 min) or missing CSRF
   const stale = Date.now() - authState.lastFetched > 30 * 60 * 1000;
-  if (!authState.csrfToken || stale) {
+  if (!authState.csrfToken || stale || authState.authUser !== account.index) {
     await fetchAuthFromPage();
   }
   return authState;
@@ -125,6 +283,7 @@ function resetNotebookAuth() {
     sessionId: '',
     buildLabel: '',
     email: '',
+    authUser: selectedGoogleAccount.index,
     lastFetched: 0,
   };
   conversationCache = {};
@@ -149,6 +308,7 @@ function buildBatchUrl(rpcId, auth, sourcePath = '/') {
     bl: auth.buildLabel || BL_FALLBACK,
     hl: 'en',
     rt: 'c',
+    authuser: selectedAuthParam(auth),
   });
   if (auth.sessionId) params.set('f.sid', auth.sessionId);
   return `${BATCHEXECUTE_URL}?${params}`;
@@ -201,11 +361,15 @@ async function callRpc(rpcId, params, sourcePath = '/') {
   const auth = await getAuth();
   const url = buildBatchUrl(rpcId, auth, sourcePath);
   const body = buildBatchBody(rpcId, params, auth.csrfToken);
+  const authUser = auth.authUser ?? selectedGoogleAccount.index;
 
   const resp = await fetch(url, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      ...googleAuthHeaders(authUser),
+    },
     body,
   });
 
@@ -581,13 +745,17 @@ async function queryNotebook(notebookId, queryText, conversationId) {
     hl: 'en',
     _reqid: String(reqid),
     rt: 'c',
+    authuser: selectedAuthParam(auth),
   });
   if (auth.sessionId) urlParams.set('f.sid', auth.sessionId);
 
   const resp = await fetch(`${QUERY_URL}?${urlParams}`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      ...googleAuthHeaders(auth.authUser ?? selectedGoogleAccount.index),
+    },
     body,
   });
 
@@ -654,9 +822,10 @@ function resetGeminiAuth() {
 }
 
 async function fetchGeminiPage() {
-  const resp = await fetch(GEM_URL, {
+  const account = await getSelectedGoogleAccount();
+  const resp = await fetch(accountUrl(GEM_URL, account), {
     credentials: 'include',
-    headers: { Accept: 'text/html,application/xhtml+xml' },
+    headers: { Accept: 'text/html,application/xhtml+xml', ...googleAuthHeaders(account.index) },
   });
   if (!resp.ok) throw new Error(`Gemini page fetch failed: ${resp.status}`);
   if (resp.url.includes('accounts.google.com')) throw new Error('NOT_LOGGED_IN_GEMINI');
@@ -669,12 +838,13 @@ async function fetchGeminiPage() {
   const blMatch = html.match(/"bl"\s*:\s*"([^"]+)"/) || html.match(/boq_assistant-bard-web-server_[\d.]+_p\d+/);
   const bl = blMatch ? (blMatch[1] || blMatch[0]) : 'boq_assistant-bard-web-server_20240625.13_p0';
 
-  geminiAuth = { ...geminiAuth, SNlM0e: snlm0e, bl, lastFetched: Date.now() };
+  geminiAuth = { ...geminiAuth, SNlM0e: snlm0e, bl, authUser: account.index, lastFetched: Date.now() };
   return geminiAuth;
 }
 
 async function getGeminiAuth() {
-  if (!geminiAuth.SNlM0e || Date.now() - geminiAuth.lastFetched > 25 * 60 * 1000) {
+  const account = await getSelectedGoogleAccount();
+  if (!geminiAuth.SNlM0e || Date.now() - geminiAuth.lastFetched > 25 * 60 * 1000 || geminiAuth.authUser !== account.index) {
     await fetchGeminiPage();
   }
   return geminiAuth;
@@ -743,9 +913,10 @@ function makeUUID() {
 
 async function sendToGemini(rawText, gemId = GEMS.bullets) {
   const auth = await getGeminiAuth();
+  const account = await getSelectedGoogleAccount();
   const text = stripForGemini(rawText);
   const sid = makeUUID();
-  const gemUrl = `${GEMINI_BASE}/gem/${gemId}`;
+  const gemUrl = accountUrl(`${GEMINI_BASE}/gem/${gemId}`, account);
 
   // Conversation context: 10-element array (positions 0,1,9 hold IDs for continuation)
   const convCtx = geminiAuth.conversationId
@@ -785,6 +956,7 @@ async function sendToGemini(rawText, gemId = GEMS.bullets) {
     bl:     auth.bl,
     _reqid: String(Math.floor(Math.random() * 900000) + 100000),
     rt:     'c',
+    authuser: accountAuthParam(account),
   });
 
   const body = new URLSearchParams({
@@ -800,6 +972,7 @@ async function sendToGemini(rawText, gemId = GEMS.bullets) {
       'Origin':                     GEMINI_BASE,
       'Referer':                    gemUrl,
       'X-Same-Domain':              '1',
+      ...googleAuthHeaders(account.index),
       'x-goog-ext-525001261-jspb':  `[1,null,null,null,"56fdd199312815e2",null,null,0,[4,5,6,8],null,null,2,null,null,1,1,"${sid}"]`,
       'x-goog-ext-525005358-jspb':  `["${sid}",1]`,
       'x-goog-ext-73010989-jspb':   '[0]',
@@ -953,6 +1126,9 @@ function sleep(ms) {
 }
 
 async function uploadBlobToNotebook(notebookId, filename, blob, settleMs = UPLOAD_SETTLE_MS) {
+  const auth = await getAuth();
+  const authUser = String(auth.authUser ?? selectedGoogleAccount.index);
+  const authParam = selectedAuthParam(auth);
   const regParams = [
     [[filename]], notebookId, [2],
     [1, null, null, null, null, null, null, null, null, null, [1]],
@@ -968,7 +1144,7 @@ async function uploadBlobToNotebook(notebookId, filename, blob, settleMs = UPLOA
   if (!sourceId) throw new Error(`No source ID for ${filename}`);
 
   const initBody = JSON.stringify({ PROJECT_ID: notebookId, SOURCE_NAME: filename, SOURCE_ID: sourceId });
-  const initResp = await fetch(`${BASE_URL}/upload/_/?authuser=0`, {
+  const initResp = await fetch(`${BASE_URL}/upload/_/?authuser=${encodeURIComponent(authParam)}`, {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -976,7 +1152,7 @@ async function uploadBlobToNotebook(notebookId, filename, blob, settleMs = UPLOA
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
       'Origin': BASE_URL,
       'Referer': `${BASE_URL}/`,
-      'x-goog-authuser': '0',
+      'x-goog-authuser': authUser,
       'x-goog-upload-command': 'start',
       'x-goog-upload-header-content-length': String(blob.size),
       'x-goog-upload-protocol': 'resumable',
@@ -996,7 +1172,7 @@ async function uploadBlobToNotebook(notebookId, filename, blob, settleMs = UPLOA
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
       'Origin': BASE_URL,
       'Referer': `${BASE_URL}/`,
-      'x-goog-authuser': '0',
+      'x-goog-authuser': authUser,
       'x-goog-upload-command': 'upload, finalize',
       'x-goog-upload-offset': '0',
     },
@@ -1170,11 +1346,31 @@ async function handleMessage(msg) {
     }
 
     case 'GET_ACCOUNTS': {
-      const [accounts, auth] = await Promise.all([
-        fetchGoogleAccounts(),
-        getAuth(),
-      ]);
-      return { accounts, currentEmail: auth.email };
+      const selected = await getSelectedGoogleAccount();
+      const accounts = await fetchGoogleAccounts();
+      const matched = accounts.find(account => account.index === selected.index)
+        || accounts.find(account => account.email === selected.email)
+        || accounts[0]
+        || selected;
+      if (matched && matched.index !== selected.index) {
+        selectedGoogleAccount = { index: matched.index, email: matched.email || '' };
+        await storageSet({ [GOOGLE_ACCOUNT_STORAGE_KEY]: selectedGoogleAccount });
+        resetNotebookAuth();
+      }
+      const auth = await getAuth();
+      return { accounts, currentEmail: auth.email, selectedAuthUser: selectedGoogleAccount.index, selectedEmail: selectedGoogleAccount.email };
+    }
+
+    case 'SET_GOOGLE_ACCOUNT': {
+      const index = Number.isInteger(msg.index) ? Math.max(0, msg.index) : 0;
+      selectedGoogleAccount = {
+        index,
+        email: typeof msg.email === 'string' ? msg.email : '',
+      };
+      await storageSet({ [GOOGLE_ACCOUNT_STORAGE_KEY]: selectedGoogleAccount });
+      resetNotebookAuth();
+      resetGeminiAuth();
+      return await refreshExternalSessions();
     }
 
     case 'LIST_NOTEBOOKS': {
@@ -1202,6 +1398,9 @@ async function handleMessage(msg) {
     }
 
     case 'PREPARE_FILE_UPLOAD': {
+      const auth = await getAuth();
+      const authUser = String(auth.authUser ?? selectedGoogleAccount.index);
+      const authParam = selectedAuthParam(auth);
       // Step 1: Register file source → get SOURCE_ID
       const regParams = [
         [[msg.filename]],
@@ -1228,7 +1427,7 @@ async function handleMessage(msg) {
         SOURCE_ID: sourceId,
       });
 
-      const initResp = await fetch(`${BASE_URL}/upload/_/?authuser=0`, {
+      const initResp = await fetch(`${BASE_URL}/upload/_/?authuser=${encodeURIComponent(authParam)}`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -1236,7 +1435,7 @@ async function handleMessage(msg) {
           'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
           'Origin': BASE_URL,
           'Referer': `${BASE_URL}/`,
-          'x-goog-authuser': '0',
+          'x-goog-authuser': authUser,
           'x-goog-upload-command': 'start',
           'x-goog-upload-header-content-length': String(msg.fileSize),
           'x-goog-upload-protocol': 'resumable',
@@ -1250,7 +1449,7 @@ async function handleMessage(msg) {
 
       // Return the upload URL to the sidepanel — step 3 runs there so the
       // File object never has to cross the message channel.
-      return { uploadUrl };
+      return { uploadUrl, authUser };
     }
 
     case 'GET_NOTEBOOK': {
