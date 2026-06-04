@@ -491,6 +491,8 @@ function escHtml(str) {
 
 function renderInline(raw) {
   let s = escHtml(raw);
+  // Source-doc citation markers can leak from NotebookLM-backed prompts.
+  s = s.replace(/\[\s*cite:\s*[\d,\s–\-]+\]/gi, '');
   // Bold
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
   // Italic (single *, not part of **)

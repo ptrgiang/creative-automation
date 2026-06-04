@@ -710,6 +710,7 @@ async function refreshExternalSessions() {
 
 function stripForGemini(text) {
   return text
+    .replace(/\[\s*cite:\s*[\d,\s–\-]+\]/gi, '') // remove [cite: 1]
     .replace(/\[[\d,\s–\-]+\]/g, '')        // remove [10] [1,2] citations
     .replace(/\*\*([^*\n]+)\*\*/g, '$1')     // **bold** → plain
     .replace(/(?<!\*)\*(?!\*)([^*\n]+)(?<!\*)\*(?!\*)/g, '$1') // *italic* → plain
@@ -726,8 +727,10 @@ function cleanGeminiResponse(text) {
     /^(?:Here is|Here are|Below is|The following is)\s[^:\n]{0,120}(?:analysis|summary|breakdown|listing|provided sources|exclusively)[^:\n]{0,80}:\s*/i,
     ''
   );
-  // Strip [N] citations
-  text = text.replace(/\[[\d,\s–\-]+\]/g, '');
+  // Strip NotebookLM/source citations
+  text = text
+    .replace(/\[\s*cite:\s*[\d,\s–\-]+\]/gi, '')
+    .replace(/\[[\d,\s–\-]+\]/g, '');
   return text.trim();
 }
 
@@ -865,40 +868,23 @@ function parseGeminiResponse(raw) {
 const CHATGPT_GPT_URL = 'https://chatgpt.com/g/g-69080c3e90808191a324742811037c96-product-description';
 
 async function sendToChatGPT(text) {
-  // Find existing GPT tab or open a new one
-  const allTabs = await chrome.tabs.query({ url: 'https://chatgpt.com/*' });
-  const existing = allTabs.find(t => t.url?.includes('g-69080c3e90808191a324742811037c96'));
+  const tab = await chrome.tabs.create({ url: CHATGPT_GPT_URL });
+  const tabId = tab.id;
 
-  let tabId;
-  let needsLoad = false;
-
-  if (existing) {
-    tabId = existing.id;
-    await chrome.tabs.update(tabId, { active: true });
-    const tabInfo = await chrome.tabs.get(tabId);
-    await chrome.windows.update(tabInfo.windowId, { focused: true });
-  } else {
-    const tab = await chrome.tabs.create({ url: CHATGPT_GPT_URL });
-    tabId = tab.id;
-    needsLoad = true;
-  }
-
-  if (needsLoad) {
-    // Wait for page to reach 'complete'
-    await new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('ChatGPT load timeout')), 30000);
-      const fn = (id, info) => {
-        if (id === tabId && info.status === 'complete') {
-          clearTimeout(t);
-          chrome.tabs.onUpdated.removeListener(fn);
-          resolve();
-        }
-      };
-      chrome.tabs.onUpdated.addListener(fn);
-    });
-    // Extra wait for React / ChatGPT JS to finish mounting
-    await new Promise(r => setTimeout(r, 2500));
-  }
+  // Wait for page to reach 'complete'
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('ChatGPT load timeout')), 30000);
+    const fn = (id, info) => {
+      if (id === tabId && info.status === 'complete') {
+        clearTimeout(t);
+        chrome.tabs.onUpdated.removeListener(fn);
+        resolve();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(fn);
+  });
+  // Extra wait for React / ChatGPT JS to finish mounting
+  await new Promise(r => setTimeout(r, 2500));
 
   // Focus tab then inject
   await chrome.tabs.update(tabId, { active: true });
