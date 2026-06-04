@@ -690,6 +690,19 @@ select option { background: var(--surface-strong); }
   padding: 2px 0;
 }
 
+.msg-thinking-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.msg-thinking-inline .action-spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+  border-top-color: var(--muted);
+}
+
 .msg-skeleton {
   display: flex;
   flex-direction: column;

@@ -396,7 +396,7 @@ async function sendProductDesc(sourceText, gptBtn) {
   result.className = 'msg msg-gemini';
   messages.appendChild(result);
   const fallbackUrl = 'https://chatgpt.com/g/g-69080c3e90808191a324742811037c96-product-description';
-  setTransientResponse(result, 'Sending...');
+  setTransientResponse(result, '<em class="msg-thinking msg-thinking-inline"><span class="action-spinner" aria-hidden="true"></span>Sending...</em>');
   messages.scrollTop = messages.scrollHeight;
 
   try {
@@ -587,7 +587,7 @@ function addGeminiActionsToResponse(msgEl, getText) {
     messages.appendChild(wrap);
     btn.disabled = true;
     result.className = 'msg msg-gemini';
-    setTransientResponse(result, `<em class="msg-thinking">${thinking}</em>`);
+    setTransientResponse(result, `<em class="msg-thinking msg-thinking-inline"><span class="action-spinner" aria-hidden="true"></span>${escHtml(thinking)}</em>`);
     messages.scrollTop = messages.scrollHeight;
 
     try {
@@ -761,14 +761,16 @@ function appendAnalysisMessage(rawText) {
   }
 
   async function sendProductDesc(sourceText, gptBtn) {
-    gptBtn.disabled = true;
-    setActionIconState(gptBtn, 'loading', 'Opening Product Description');
+    if (gptBtn) {
+      gptBtn.disabled = true;
+      setActionIconState(gptBtn, 'loading', 'Opening Product Description');
+    }
     appendLocalAutomationUser('product', 'Product Description');
     const result = document.createElement('div');
     result.className = 'msg msg-gemini';
     messages.appendChild(result);
     const fallbackUrl = 'https://chatgpt.com/g/g-69080c3e90808191a324742811037c96-product-description';
-    setTransientResponse(result, 'Sending...');
+    setTransientResponse(result, '<em class="msg-thinking msg-thinking-inline"><span class="action-spinner" aria-hidden="true"></span>Sending...</em>');
     messages.scrollTop = messages.scrollHeight;
 
     try {
@@ -786,8 +788,10 @@ function appendAnalysisMessage(rawText) {
         `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
         { rawText: sourceText }
       );
-      setActionIconState(gptBtn, 'done', 'Product Description sent');
-      setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
+      if (gptBtn) {
+        setActionIconState(gptBtn, 'done', 'Product Description sent');
+        setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
+      }
     } catch (e) {
       result.className = 'msg msg-error';
       setTransientResponse(result, `Product Description error: ${escHtml(e.message)}`);
@@ -798,8 +802,10 @@ function appendAnalysisMessage(rawText) {
         `Product Description error: ${escHtml(e.message)}`,
         { rawText: sourceText, status: 'error' }
       );
-      setActionIconState(gptBtn, 'error', 'Product Description error');
-      setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
+      if (gptBtn) {
+        setActionIconState(gptBtn, 'error', 'Product Description error');
+        setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
+      }
     }
   }
 
@@ -813,7 +819,7 @@ function appendAnalysisMessage(rawText) {
     messages.appendChild(wrap);
     btn.disabled = true;
     result.className = 'msg msg-gemini';
-    setTransientResponse(result, `<em class="msg-thinking">${thinking}</em>`);
+    setTransientResponse(result, `<em class="msg-thinking msg-thinking-inline"><span class="action-spinner" aria-hidden="true"></span>${escHtml(thinking)}</em>`);
     messages.scrollTop = messages.scrollHeight;
     try {
       const { content } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
