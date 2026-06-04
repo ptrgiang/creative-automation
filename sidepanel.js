@@ -386,6 +386,14 @@ function setResponseHtml(el, html, rawText, onSave) {
   ensureCopyButton(el);
 }
 
+function scrollResponseIntoView(el) {
+  requestAnimationFrame(() => {
+    const row = el.nextElementSibling;
+    const target = row?.classList.contains('msg-actions-row') ? row : el;
+    target.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  });
+}
+
 async function sendProductDesc(sourceText, gptBtn) {
   if (gptBtn) {
     gptBtn.disabled = true;
@@ -407,6 +415,7 @@ async function sendProductDesc(sourceText, gptBtn) {
       `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
       `Sent: ${url}`
     );
+    scrollResponseIntoView(result);
     saveLocalAutomationResponse(
       result,
       'product',
@@ -421,6 +430,7 @@ async function sendProductDesc(sourceText, gptBtn) {
   } catch (e) {
     result.className = 'msg msg-error';
     setTransientResponse(result, `Product Description error: ${escHtml(e.message)}`);
+    scrollResponseIntoView(result);
     saveLocalAutomationResponse(
       result,
       'product',
@@ -781,6 +791,7 @@ function appendAnalysisMessage(rawText) {
         `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
         `Sent: ${url}`
       );
+      scrollResponseIntoView(result);
       saveLocalAutomationResponse(
         result,
         'product',
@@ -795,6 +806,7 @@ function appendAnalysisMessage(rawText) {
     } catch (e) {
       result.className = 'msg msg-error';
       setTransientResponse(result, `Product Description error: ${escHtml(e.message)}`);
+      scrollResponseIntoView(result);
       saveLocalAutomationResponse(
         result,
         'product',
