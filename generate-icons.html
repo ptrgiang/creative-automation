@@ -1,105 +1,235 @@
 <!DOCTYPE html>
-<!-- Open this file in Chrome to download Creative Automation extension icons. -->
+<!-- Open this file in Chrome to preview and download Creative Automation extension icons. -->
 <html>
 <head>
   <meta charset="UTF-8">
   <title>Generate Creative Automation Icons</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       min-height: 100vh;
       display: grid;
       place-items: center;
       margin: 0;
-      background: #dedfd9;
-      color: #0b0b0a;
-      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, #c9d9ee 0%, #f7fbff 100%);
+      color: #182432;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
+
+    main {
+      width: min(520px, calc(100vw - 32px));
+      display: grid;
+      gap: 18px;
+      padding: 24px;
+      border: 1px solid rgba(49, 92, 135, 0.16);
+      border-radius: 14px;
+      background: rgba(247, 251, 255, 0.94);
+      box-shadow: 0 18px 42px rgba(33, 77, 121, 0.12);
+    }
+
+    h1 {
+      margin: 0;
+      color: #2f6fd0;
+      font-family: Georgia, "Times New Roman", Times, serif;
+      font-size: 28px;
+      font-weight: 400;
+      letter-spacing: -0.025em;
+    }
+
+    p {
+      margin: 0;
+      color: #596979;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .preview {
+      display: grid;
+      place-items: center;
+      gap: 10px;
+      min-height: 136px;
+      padding: 14px;
+      border: 1px solid rgba(49, 92, 135, 0.14);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .icon-tile {
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #2f6fd0;
+    }
+
+    .preview:nth-child(1) .icon-tile {
+      width: 32px;
+      height: 32px;
+    }
+
+    .preview:nth-child(2) .icon-tile {
+      width: 48px;
+      height: 48px;
+    }
+
+    .preview:nth-child(3) .icon-tile {
+      width: 96px;
+      height: 96px;
+    }
+
     canvas {
-      width: 128px;
-      height: 128px;
-      image-rendering: pixelated;
+      image-rendering: auto;
+    }
+
+    #icon16 {
+      width: 32px;
+      height: 32px;
+    }
+
+    #icon48 {
+      width: 48px;
+      height: 48px;
+    }
+
+    #icon128 {
+      width: 96px;
+      height: 96px;
+    }
+
+    .label {
+      color: #596979;
+      font-size: 12px;
+    }
+
+    button {
+      width: 100%;
+      height: 38px;
+      border: 1px solid #2863ba;
+      border-radius: 8px;
+      background: #2f6fd0;
+      color: #ffffff;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    button:hover {
+      background: #245faf;
     }
   </style>
 </head>
 <body>
-<canvas id="c" aria-label="Creative Automation icon preview"></canvas>
+<main>
+  <div>
+    <h1>Creative Automation</h1>
+    <p>Preview the blue four-petal icon before downloading regenerated extension assets.</p>
+  </div>
+
+  <div class="preview-grid">
+    <div class="preview">
+      <span class="icon-tile"><canvas id="icon16" aria-label="16 pixel Creative Automation icon preview"></canvas></span>
+      <span class="label">16 px</span>
+    </div>
+    <div class="preview">
+      <span class="icon-tile"><canvas id="icon48" aria-label="48 pixel Creative Automation icon preview"></canvas></span>
+      <span class="label">48 px</span>
+    </div>
+    <div class="preview">
+      <span class="icon-tile"><canvas id="icon128" aria-label="128 pixel Creative Automation icon preview"></canvas></span>
+      <span class="label">128 px</span>
+    </div>
+  </div>
+
+  <button id="download-icons" type="button">Download icons</button>
+</main>
+
 <script>
-function roundRect(ctx, x, y, w, h, r) {
-  const rr = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.lineTo(x + w - rr, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
-  ctx.lineTo(x + w, y + h - rr);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
-  ctx.lineTo(x + rr, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
-  ctx.lineTo(x, y + rr);
-  ctx.quadraticCurveTo(x, y, x + rr, y);
-  ctx.closePath();
-}
+const ICON_SIZES = [16, 48, 128];
 
 function drawMark(ctx, size) {
   const scale = size / 64;
   ctx.save();
   ctx.scale(scale, scale);
 
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = '#0b0b0a';
-  ctx.fillStyle = '#fff35d';
+  const white = '#f7fbff';
+
+  ctx.fillStyle = white;
 
   ctx.beginPath();
-  ctx.moveTo(12, 8);
-  ctx.lineTo(40, 8);
-  ctx.lineTo(40, 24);
-  ctx.lineTo(54, 24);
-  ctx.lineTo(34, 56);
-  ctx.lineTo(34, 39);
-  ctx.lineTo(12, 39);
+  ctx.moveTo(30.5, 27.5);
+  ctx.lineTo(20.4, 17.4);
+  ctx.bezierCurveTo(17.2, 14.2, 12.2, 14.4, 9.3, 17.8);
+  ctx.bezierCurveTo(6.6, 21, 7.2, 25.8, 10.5, 28.4);
+  ctx.lineTo(20.8, 36.6);
   ctx.closePath();
   ctx.fill();
-  ctx.stroke();
 
-  ctx.fillStyle = '#0b0b0a';
   ctx.beginPath();
-  ctx.arc(23, 31, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(34, 31, 3, 0, Math.PI * 2);
+  ctx.moveTo(36.5, 30.5);
+  ctx.lineTo(46.6, 20.4);
+  ctx.bezierCurveTo(49.8, 17.2, 49.6, 12.2, 46.2, 9.3);
+  ctx.bezierCurveTo(43, 6.6, 38.2, 7.2, 35.6, 10.5);
+  ctx.lineTo(27.4, 20.8);
+  ctx.closePath();
   ctx.fill();
 
-  ctx.lineWidth = 3;
-  [[17, 18], [27, 18]].forEach(([x, y]) => {
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + 5, y);
-    ctx.stroke();
-  });
+  ctx.beginPath();
+  ctx.moveTo(33.5, 36.5);
+  ctx.lineTo(43.6, 46.6);
+  ctx.bezierCurveTo(46.8, 49.8, 51.8, 49.6, 54.7, 46.2);
+  ctx.bezierCurveTo(57.4, 43, 56.8, 38.2, 53.5, 35.6);
+  ctx.lineTo(43.2, 27.4);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(27.5, 33.5);
+  ctx.lineTo(17.4, 43.6);
+  ctx.bezierCurveTo(14.2, 46.8, 14.4, 51.8, 17.8, 54.7);
+  ctx.bezierCurveTo(21, 57.4, 25.8, 56.8, 28.4, 53.5);
+  ctx.lineTo(36.6, 43.2);
+  ctx.closePath();
+  ctx.fill();
 
   ctx.restore();
 }
 
-function makeIcon(size, download = true) {
-  const canvas = document.getElementById('c');
+function renderIcon(size) {
+  const canvas = document.getElementById(`icon${size}`);
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = '#2f6fd0';
+  ctx.fillRect(0, 0, size, size);
   drawMark(ctx, size);
-
-  if (!download) return;
-  canvas.toBlob(blob => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `icon${size}.png`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  });
 }
 
-makeIcon(128, false);
-[16, 48, 128].forEach((size, index) => setTimeout(() => makeIcon(size), index * 300));
+function downloadIcon(size, delay) {
+  setTimeout(() => {
+    const canvas = document.getElementById(`icon${size}`);
+    canvas.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `icon${size}.png`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  }, delay);
+}
+
+ICON_SIZES.forEach(renderIcon);
+document.getElementById('download-icons').addEventListener('click', () => {
+  ICON_SIZES.forEach((size, index) => downloadIcon(size, index * 300));
+});
 </script>
 </body>
 </html>

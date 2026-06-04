@@ -1878,3 +1878,296 @@ header::before {
   padding-top: 7px;
   border-top-color: rgba(11, 11, 10, 0.06);
 }
+
+/* Peaceful sky theme */
+:root {
+  --page: #c9d9ee;
+  --shell: #f7fbff;
+  --surface: #edf5fc;
+  --surface-strong: #ffffff;
+  --surface-raised: #fbfdff;
+  --ink: #182432;
+  --muted: #596979;
+  --faint: #91a0ae;
+  --line: #d9e5f0;
+  --hairline: rgba(49, 92, 135, 0.16);
+  --accent: #ffd84d;
+  --accent-soft: #fff3b1;
+  --accent-ink: #182432;
+  --blue: #2f6fd0;
+  --blue-soft: #e5f0ff;
+  --green: #2f8f66;
+  --red: #c64a3f;
+  --chip: #f4f8fc;
+  --chip-hover: #e9f3ff;
+  --display-font: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --ui-font: "Noto Sans", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+  --shadow: 0 14px 34px rgba(33, 77, 121, 0.12);
+  --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.82) inset, 0 1px 2px rgba(33, 77, 121, 0.05);
+  --shadow-control: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(33, 77, 121, 0.08);
+  --focus-ring: 0 0 0 3px rgba(87, 147, 224, 0.22);
+}
+
+body {
+  background:
+    linear-gradient(180deg, rgba(76, 138, 216, 0.2) 0%, rgba(255, 255, 255, 0.22) 46%, rgba(246, 250, 255, 0.96) 100%),
+    #c9d9ee;
+  color: var(--ink);
+}
+
+header,
+.screen {
+  background: rgba(247, 251, 255, 0.94);
+}
+
+.brand-mark {
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.8));
+}
+
+.logo span {
+  color: #163a62;
+  font-family: var(--display-font);
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.amazon-section-header,
+.notebook-picker-button,
+.notebook-picker-label,
+.notebook-picker-count,
+.tab,
+.btn,
+.source-title,
+.upload-status,
+.amazon-info,
+.amazon-progress,
+.loading-label,
+.confirm-content h2 {
+  font-family: var(--ui-font);
+  font-weight: 600;
+}
+
+.amazon-link:hover,
+.icon-btn:hover:not(:disabled),
+.inline-tool-btn:hover:not(:disabled),
+.action-icon-btn:hover:not(:disabled),
+.notebook-picker-button:hover,
+.notebook-picker-button:focus,
+.btn-gem:hover:not(:disabled),
+.btn-gpt:hover:not(:disabled),
+.source-item:hover {
+  background: var(--blue-soft);
+}
+
+.tabs {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(49, 92, 135, 0.12);
+}
+
+.tab.active {
+  background: var(--blue);
+  color: #ffffff;
+  box-shadow: 0 5px 12px rgba(47, 111, 208, 0.22);
+}
+
+.tab:hover:not(.active) {
+  background: var(--blue-soft);
+  color: #163a62;
+}
+
+.btn-primary,
+.icon-btn-accent,
+.icon-btn-accent:hover {
+  background: var(--accent);
+  border-color: #e5bf35;
+  color: var(--accent-ink);
+}
+
+.send-btn,
+.confirm-primary {
+  background: var(--blue);
+  border-color: #2863ba;
+  color: #ffffff;
+  box-shadow: 0 5px 12px rgba(47, 111, 208, 0.2);
+}
+
+.send-btn:hover:not(:disabled),
+.confirm-primary:hover:not(:disabled) {
+  background: #245faf;
+}
+
+.msg-user {
+  background: #2f6fd0;
+  color: #ffffff;
+}
+
+.msg-ai .md-h,
+.msg-gemini .md-h {
+  color: #163a62;
+  font-family: var(--display-font);
+  font-weight: 700;
+}
+
+.msg-ai strong,
+.msg-gemini strong {
+  color: #1f3041;
+  font-weight: 600;
+}
+
+.msg-ai cite {
+  background: #fff1a0;
+  color: #263648;
+}
+
+select,
+textarea,
+input[type="url"],
+.rename-inline-input,
+.notebook-picker-button,
+.icon-btn,
+.inline-tool-btn,
+.action-icon-btn,
+.btn-gem,
+.btn-gpt {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(49, 92, 135, 0.16);
+  color: var(--ink);
+}
+
+.notebook-picker-menu,
+.confirm-card,
+.loading-card {
+  background: #fbfdff;
+  border-color: rgba(49, 92, 135, 0.16);
+}
+
+.notebook-picker-option:hover,
+.notebook-picker-option-active {
+  background: var(--blue-soft);
+}
+
+.chat-footer,
+.source-add {
+  border-top-color: rgba(49, 92, 135, 0.12);
+}
+
+.confirm-overlay {
+  background: rgba(38, 75, 112, 0.26);
+}
+
+.confirm-mark {
+  background: var(--accent);
+  border-color: #e5bf35;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #ffe06b;
+  border-color: #e5bf35;
+  color: var(--accent-ink);
+}
+
+/* ChatGPT-like typography */
+:root {
+  --display-font: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --ui-font: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body,
+button,
+select,
+textarea,
+input,
+.logo span,
+.amazon-section-header,
+.notebook-picker-button,
+.notebook-picker-label,
+.notebook-picker-count,
+.tab,
+.btn,
+.source-title,
+.upload-status,
+.amazon-info,
+.amazon-progress,
+.loading-label,
+.confirm-content h2,
+.msg-ai,
+.msg-gemini,
+.msg-ai .md-h,
+.msg-gemini .md-h {
+  font-family: var(--ui-font);
+}
+
+.logo span {
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.msg-ai .md-h,
+.msg-gemini .md-h {
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+#amazon-upload-btn {
+  background: #ff8a3d;
+  border-color: #e9782f;
+  color: #ffffff;
+}
+
+#amazon-upload-btn:hover:not(:disabled),
+#amazon-upload-btn:focus-visible {
+  background: #ff9b57;
+  border-color: #df6f27;
+  color: #ffffff;
+}
+
+.send-btn,
+.send-btn:hover:not(:disabled),
+.send-btn:focus-visible,
+#add-source-btn,
+#add-source-btn:hover:not(:disabled),
+#add-source-btn:focus-visible {
+  box-shadow: none;
+}
+
+.github-link {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: #163a62;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+
+.github-link:hover,
+.github-link:focus-visible {
+  background: var(--blue-soft);
+  color: var(--blue);
+  outline: none;
+}
+
+.github-link:hover {
+  transform: translateY(-1px);
+}
+
+.brand-mark {
+  width: 25px;
+  height: 25px;
+  filter: none;
+}
+
+.logo {
+  gap: 8px;
+}
+
+.logo span {
+  color: #2f6fd0;
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}

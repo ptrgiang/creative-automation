@@ -9,6 +9,7 @@ const state = {
   sources: [],
   conversationId: null,
   sending: false,
+  addingSource: false,
 };
 
 const LOCAL_AUTOMATION_STORAGE_PREFIX = 'creativeAutomation:actions:';
@@ -1056,8 +1057,13 @@ function renderSources(sources) {
   `).join('');
 }
 
+function updateAddSourceButton() {
+  addSourceBtn.disabled = state.addingSource || !sourceUrl.value.trim() || !state.selectedNotebookId;
+}
+
 function setAddSourceLoading(isLoading) {
-  addSourceBtn.disabled = isLoading;
+  state.addingSource = isLoading;
+  updateAddSourceButton();
   addSourceBtn.classList.toggle('is-loading', isLoading);
   addSourceBtn.setAttribute('aria-label', isLoading ? 'Adding URL' : 'Add URL');
   addSourceBtn.title = isLoading ? 'Adding URL' : 'Add URL';
@@ -1178,6 +1184,7 @@ async function selectNotebook(id) {
     renameNbBtn.classList.add('hidden');
     updateNotebookPickerLabel();
     renderNotebookPicker();
+    updateAddSourceButton();
     return;
   }
 
@@ -1189,6 +1196,7 @@ async function selectNotebook(id) {
   messages.innerHTML = '';
   updateNotebookPickerLabel();
   renderNotebookPicker();
+  updateAddSourceButton();
   renderSourcesSkeleton();
 
   showLoading(true, 'Loading notebook...');
@@ -1260,7 +1268,7 @@ async function sendQuery() {
 
 async function addSource() {
   const url = sourceUrl.value.trim();
-  if (!url || !state.selectedNotebookId) return;
+  if (!url || !state.selectedNotebookId || state.addingSource) return;
 
   setAddSourceLoading(true);
 
@@ -1632,6 +1640,7 @@ document.querySelectorAll('.tab').forEach(btn => {
 });
 
 addSourceBtn.addEventListener('click', addSource);
+sourceUrl.addEventListener('input', updateAddSourceButton);
 sourceUrl.addEventListener('keydown', e => {
   if (e.key === 'Enter') addSource();
 });
