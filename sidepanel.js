@@ -54,6 +54,7 @@ const renameInlineInput = $('rename-inline-input');
 const renameInlineConfirm = $('rename-inline-confirm');
 const renameInlineCancel = $('rename-inline-cancel');
 let inlineNotebookMode = 'rename';
+let notebookSearchQuery = '';
 
 // ─── Messaging ────────────────────────────────────────────────────────────────
 
@@ -1098,6 +1099,19 @@ function updateNotebookPickerLabel() {
   notebookPickerCount.textContent = formatSourceCount(selected.sourceCount);
 }
 
+function applyNotebookPickerFilter() {
+  const query = notebookSearchQuery.trim().toLowerCase();
+  let visibleCount = 0;
+  notebookPickerMenu.querySelectorAll('.notebook-picker-option').forEach(btn => {
+    const isEmptyOption = btn.dataset.notebookId === '';
+    const matches = !query || (!isEmptyOption && btn.dataset.searchText.includes(query));
+    btn.classList.toggle('hidden', !matches);
+    if (matches && !isEmptyOption) visibleCount += 1;
+  });
+  const noResults = notebookPickerMenu.querySelector('.notebook-picker-empty');
+  if (noResults) noResults.classList.toggle('hidden', !query || visibleCount > 0);
+}
+
 function renderNotebookPicker() {
   const emptyActive = !state.selectedNotebookId ? ' notebook-picker-option-active' : '';
   const rows = [
@@ -1106,27 +1120,53 @@ function renderNotebookPicker() {
       <span class="notebook-picker-option-count"></span>
     </button>`,
     ...state.notebooks.map(nb => `
-      <button class="notebook-picker-option${nb.id === state.selectedNotebookId ? ' notebook-picker-option-active' : ''}" type="button" data-notebook-id="${escHtml(nb.id)}">
+      <button class="notebook-picker-option${nb.id === state.selectedNotebookId ? ' notebook-picker-option-active' : ''}" type="button" data-notebook-id="${escHtml(nb.id)}" data-search-text="${escHtml(nb.title.toLowerCase())}">
         <span class="notebook-picker-option-title">${escHtml(nb.title)}</span>
         <span class="notebook-picker-option-count">${escHtml(formatSourceCount(nb.sourceCount))}</span>
       </button>
     `),
   ];
 
-  notebookPickerMenu.innerHTML = rows.join('');
+  notebookPickerMenu.innerHTML = `
+    <div class="notebook-picker-search-wrap">
+      <input id="notebook-picker-search" class="notebook-picker-search" type="search" placeholder="Search notebooks..." value="${escHtml(notebookSearchQuery)}" autocomplete="off">
+    </div>
+    <div class="notebook-picker-options">
+      ${rows.join('')}
+      <div class="notebook-picker-empty hidden">No notebooks found</div>
+    </div>
+  `;
+  const searchInput = $('notebook-picker-search');
+  searchInput.addEventListener('input', () => {
+    notebookSearchQuery = searchInput.value;
+    applyNotebookPickerFilter();
+  });
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const firstMatch = notebookPickerMenu.querySelector('.notebook-picker-option:not(.hidden)');
+      if (firstMatch) firstMatch.click();
+    }
+  });
   notebookPickerMenu.querySelectorAll('.notebook-picker-option').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.notebookId || '';
+      notebookSearchQuery = '';
       closeNotebookPicker();
       nbSelect.value = id;
       await selectNotebook(id);
     });
   });
+  applyNotebookPickerFilter();
   updateNotebookPickerLabel();
 }
 
 function openNotebookPicker() {
   notebookPickerMenu.classList.remove('hidden');
+  const searchInput = $('notebook-picker-search');
+  if (searchInput) {
+    searchInput.focus();
+    searchInput.select();
+  }
 }
 
 function closeNotebookPicker() {
@@ -1577,6 +1617,13 @@ async function init() {
 nbSelect.addEventListener('change', () => selectNotebook(nbSelect.value));
 
 notebookPickerButton.addEventListener('click', e => {
+  e.stopPropagation();
+  if (notebookPickerMenu.classList.contains('hidden')) openNotebookPicker();
+  else closeNotebookPicker();
+});
+
+notebookDisplay.addEventListener('click', e => {
+  if (e.target.closest('#rename-notebook') || e.target.closest('#notebook-picker-button')) return;
   e.stopPropagation();
   if (notebookPickerMenu.classList.contains('hidden')) openNotebookPicker();
   else closeNotebookPicker();
