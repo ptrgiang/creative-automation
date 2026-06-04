@@ -27,8 +27,19 @@ try {
     throw "Update package did not contain the expected folder: $SourceDir"
   }
 
-  Write-Step "Copying latest files"
-  Copy-Item -Path (Join-Path $SourceDir '*') -Destination $AppDir -Recurse -Force
+  Write-Step "Mirroring latest files"
+  $RobocopyArgs = @(
+    $SourceDir,
+    $AppDir,
+    '/MIR',
+    '/XD', '.git',
+    '/R:2',
+    '/W:1'
+  )
+  & robocopy @RobocopyArgs | Out-Host
+  if ($LASTEXITCODE -gt 7) {
+    throw "Robocopy failed with exit code $LASTEXITCODE"
+  }
 
   Write-Host 'Creative Automation is up to date.' -ForegroundColor Green
   Write-Host "Backup saved at: $BackupDir"

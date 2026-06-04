@@ -83,6 +83,8 @@ powershell -ExecutionPolicy Bypass -File .\update.ps1
 
 After updating, open `chrome://extensions` and click the reload icon for Creative Automation.
 
+The updater mirrors the latest repository files into your extension folder, so files removed from the repository are removed locally too. It saves a backup in your Windows temp folder before changing files.
+
 ## Workflow
 
 ### 1. Prepare NotebookLM
@@ -133,7 +135,7 @@ The extension requests:
 - `content-amazon.js` - Amazon Search compare-state bridge.
 - `icons/` - Extension icon PNG assets.
 - `generate-icons.html` - Local icon regeneration helper.
-- `update.ps1` - Windows PowerShell helper for downloading the latest extension files.
+- `update.ps1` - Windows PowerShell helper for mirroring the latest extension files.
 
 ## Manual QA Before Publishing
 
