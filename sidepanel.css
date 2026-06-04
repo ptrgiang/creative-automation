@@ -2119,6 +2119,7 @@ input,
   background: #245faf;
   border-color: #245faf;
   color: #ffffff;
+  transform: none;
 }
 
 .send-btn,
@@ -2418,4 +2419,13 @@ input,
 
 .rename-inline .icon-btn-accent {
   color: var(--blue);
+}
+
+#refresh-notebooks:hover:not(:disabled),
+#refresh-notebooks:focus-visible,
+#refresh-notebooks.is-refreshing {
+  background: var(--blue-soft);
+  border-color: rgba(49, 92, 135, 0.22);
+  color: var(--blue);
+  transform: none;
 }
