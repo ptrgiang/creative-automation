@@ -110,11 +110,14 @@ When Compare Listings is closed and the Amazon Search page clears its local sele
 
 After a NotebookLM analysis appears:
 
-1. Click **Bullet Points** to generate a structured bullet-point response.
-2. Click **Image Prompt** to generate image prompt content.
-3. Use the edit icon to adjust any generated response inline.
-4. Use the copy icon to copy a response.
-5. Use **Product Desc** under Bullet Points to send that response to ChatGPT.
+1. Use the **Bullet Points** icon button to generate structured bullet-point output.
+2. Use the **Image Prompt** icon button to generate image prompt content.
+3. Use the combined workflow icon button to run **Bullet Points → Image Prompt → Product Description** in sequence.
+4. Use the **Product Description** icon button under any Bullet Points response to send that response to ChatGPT.
+5. Use the edit icon to adjust any generated response inline.
+6. Use the copy icon to copy a response.
+
+Saved local automation history is attached to the selected notebook and reloads after the NotebookLM chat conversation.
 
 ## Permissions
 
