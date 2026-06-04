@@ -222,33 +222,115 @@ function setResponseHtml(el, html, rawText, onSave) {
 }
 
 async function sendProductDesc(sourceText, gptBtn) {
-  gptBtn.disabled = true;
-  gptBtn.textContent = 'Opening...';
-  try {
-    await send({ type: 'SEND_TO_CHATGPT', text: sourceText });
-    gptBtn.textContent = 'Sent';
-    setTimeout(() => { gptBtn.textContent = 'Product Desc'; gptBtn.disabled = false; }, 3000);
-  } catch (e) {
-    gptBtn.textContent = 'Error';
-    setTimeout(() => { gptBtn.textContent = 'Product Desc'; gptBtn.disabled = false; }, 3000);
+  if (gptBtn) {
+    gptBtn.disabled = true;
+    setActionIconState(gptBtn, 'loading', 'Opening Product Description');
   }
+  appendMessage('user', 'Product Description');
+  const result = document.createElement('div');
+  result.className = 'msg msg-gemini';
+  messages.appendChild(result);
+  const fallbackUrl = 'https://chatgpt.com/g/g-69080c3e90808191a324742811037c96-product-description';
+  setTransientResponse(result, 'Sending...');
+  messages.scrollTop = messages.scrollHeight;
+
+  try {
+    const response = await send({ type: 'SEND_TO_CHATGPT', text: sourceText });
+    const url = response?.url || fallbackUrl;
+    setResponseHtml(
+      result,
+      `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
+      `Sent: ${url}`
+    );
+    if (gptBtn) {
+      setActionIconState(gptBtn, 'done', 'Product Description sent');
+      setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
+    }
+  } catch (e) {
+    result.className = 'msg msg-error';
+    setTransientResponse(result, `Product Description error: ${escHtml(e.message)}`);
+    if (gptBtn) {
+      setActionIconState(gptBtn, 'error', 'Product Description error');
+      setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
+    }
+  }
+}
+
+function actionIconSvg(kind) {
+  if (kind === 'bullets') {
+    return `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    `;
+  }
+  if (kind === 'image') {
+    return `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="3" y="5" width="18" height="15" rx="2" stroke="currentColor" stroke-width="2"/>
+        <path d="M7 16l3.2-3.2a1.5 1.5 0 0 1 2.1 0L16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="16.5" cy="9.5" r="1.5" fill="currentColor"/>
+      </svg>
+    `;
+  }
+  if (kind === 'product') {
+    return `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M6 3h8l5 5v13H6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M14 3v5h5M9 13h6M9 17h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `;
+  }
+  if (kind === 'combo') {
+    return `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 6h5l2 3M4 18h5l2-3M13 9l2 3-2 3M15 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  }
+  if (kind === 'loading') return '<span class="action-spinner" aria-hidden="true"></span>';
+  if (kind === 'done') {
+    return `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  }
+  return `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+    </svg>
+  `;
+}
+
+function setActionIconState(btn, kind, label) {
+  btn.innerHTML = actionIconSvg(kind);
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
+function createActionIconButton(kind, label, extraClass = '') {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `action-icon-btn ${extraClass}`.trim();
+  setActionIconState(btn, kind, label);
+  return btn;
 }
 
 function addGeminiActionsToResponse(msgEl, getText) {
   const msgActions = responseActionsRow(msgEl);
   if (msgActions.querySelector('.notebook-gemini-action')) return;
 
-  const bulletsBtn = document.createElement('button');
-  bulletsBtn.className = 'btn btn-gem btn-sm notebook-gemini-action';
-  bulletsBtn.textContent = '✦ Bullet Points';
-
-  const imageBtn = document.createElement('button');
-  imageBtn.className = 'btn btn-gem btn-sm notebook-gemini-action';
-  imageBtn.textContent = '✦ Image Prompt';
+  const bulletsBtn = createActionIconButton('bullets', 'Bullet Points', 'btn-gem notebook-gemini-action');
+  const imageBtn = createActionIconButton('image', 'Image Prompt', 'btn-gem notebook-gemini-action');
+  const comboBtn = createActionIconButton('combo', 'Run Bullet Points, Image Prompt, and Product Description', 'btn-gem notebook-gemini-action');
 
   const msgEditBtn = msgActions.querySelector('.msg-edit-btn');
   msgActions.insertBefore(bulletsBtn, msgEditBtn);
   msgActions.insertBefore(imageBtn, msgEditBtn);
+  msgActions.insertBefore(comboBtn, msgEditBtn);
 
   const analysisId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -266,21 +348,14 @@ function addGeminiActionsToResponse(msgEl, getText) {
     return { wrap, result };
   }
 
-  function ensureResultBlock(kind) {
-    const existing = messages.querySelector(`.analysis-result-group[data-analysis-id="${analysisId}"][data-kind="${kind}"]`);
-    if (existing) {
-      return { wrap: existing, result: existing.querySelector('.msg-gemini') };
-    }
-    return createResultBlock(kind);
-  }
-
   async function fireGemini(btn, kind, gemId, label, thinking) {
     if (msgEl.dataset.editing === 'true') saveResponseEdit(msgEl);
+    const actionLabel = kind === 'bullets' ? 'Bullet Points' : kind === 'image' ? 'Image Prompt' : label;
     const text = (getText() || '').trim();
-    if (!text) return;
+    if (!text) return '';
 
-    appendMessage('user', label);
-    const { wrap, result } = ensureResultBlock(kind);
+    appendMessage('user', actionLabel);
+    const { wrap, result } = createResultBlock(kind);
     messages.appendChild(wrap);
     btn.disabled = true;
     result.className = 'msg msg-gemini';
@@ -289,6 +364,7 @@ function addGeminiActionsToResponse(msgEl, getText) {
 
     try {
       const { content } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
+      const responseText = content || '';
       result.dataset.rawText = content || '';
       setResponseHtml(
         result,
@@ -300,27 +376,39 @@ function addGeminiActionsToResponse(msgEl, getText) {
       if (kind === 'bullets' && content) {
         const gptActions = responseActionsRow(result);
         gptActions.querySelector('.btn-gpt')?.remove();
-        const gptBtn = document.createElement('button');
-        gptBtn.className = 'btn btn-gpt btn-sm';
-        gptBtn.textContent = 'Product Desc';
+        const gptBtn = createActionIconButton('product', 'Product Description', 'btn-gpt');
         gptBtn.addEventListener('click', () => sendProductDesc(result.dataset.rawText || content, gptBtn));
         gptActions.insertBefore(gptBtn, gptActions.querySelector('.msg-edit-btn'));
       }
+      return responseText;
     } catch (e) {
       result.className = 'msg msg-error';
       setTransientResponse(result, `Gemini error: ${escHtml(e.message)}`);
+      return '';
     } finally {
       btn.disabled = false;
-      btn.textContent = label;
+      setActionIconState(btn, kind, actionLabel);
       messages.scrollTop = messages.scrollHeight;
     }
   }
 
   bulletsBtn.addEventListener('click', () =>
-    fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', '✦ Bullet Points', 'Creating bullet points...'));
+    fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', 'Bullet Points', 'Creating bullet points...'));
 
   imageBtn.addEventListener('click', () =>
-    fireGemini(imageBtn, 'image', '6a7373766848', '✦ Image Prompt', 'Generating image prompt...'));
+    fireGemini(imageBtn, 'image', '6a7373766848', 'Image Prompt', 'Generating image prompt...'));
+  comboBtn.addEventListener('click', async () => {
+    comboBtn.disabled = true;
+    setActionIconState(comboBtn, 'loading', 'Running combination flow');
+    try {
+      const bulletText = await fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', 'Bullet Points', 'Creating bullet points...');
+      await fireGemini(imageBtn, 'image', '6a7373766848', 'Image Prompt', 'Generating image prompt...');
+      if (bulletText) await sendProductDesc(bulletText);
+    } finally {
+      comboBtn.disabled = false;
+      setActionIconState(comboBtn, 'combo', 'Run Bullet Points, Image Prompt, and Product Description');
+    }
+  });
 }
 
 function appendMessage(role, text) {
@@ -357,18 +445,15 @@ function appendAnalysisMessage(rawText) {
   messages.appendChild(msgEl);
   setResponseHtml(msgEl, renderMarkdown(rawText), rawText, text => { currentText = text; });
 
-  const bulletsBtn = document.createElement('button');
-  bulletsBtn.className = 'btn btn-gem btn-sm';
-  bulletsBtn.textContent = '✦ Bullet Points';
-
-  const imageBtn = document.createElement('button');
-  imageBtn.className = 'btn btn-gem btn-sm';
-  imageBtn.textContent = '✦ Image Prompt';
+  const bulletsBtn = createActionIconButton('bullets', 'Bullet Points', 'btn-gem');
+  const imageBtn = createActionIconButton('image', 'Image Prompt', 'btn-gem');
+  const comboBtn = createActionIconButton('combo', 'Run Bullet Points, Image Prompt, and Product Description', 'btn-gem');
 
   const msgActions = responseActionsRow(msgEl);
   const msgEditBtn = msgActions.querySelector('.msg-edit-btn');
   msgActions.insertBefore(bulletsBtn, msgEditBtn);
   msgActions.insertBefore(imageBtn, msgEditBtn);
+  msgActions.insertBefore(comboBtn, msgEditBtn);
 
   const analysisId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -390,34 +475,42 @@ function appendAnalysisMessage(rawText) {
     return { wrap, result };
   }
 
-  function ensureResultBlock(kind) {
-    const existing = messages.querySelector(`.analysis-result-group[data-analysis-id="${analysisId}"][data-kind="${kind}"]`);
-    if (existing) {
-      return { wrap: existing, result: existing.querySelector('.msg-gemini') };
-    }
-    return createResultBlock(kind);
-  }
-
   async function sendProductDesc(sourceText, gptBtn) {
     gptBtn.disabled = true;
-    gptBtn.textContent = 'Opening...';
+    setActionIconState(gptBtn, 'loading', 'Opening Product Description');
+    appendMessage('user', 'Product Description');
+    const result = document.createElement('div');
+    result.className = 'msg msg-gemini';
+    messages.appendChild(result);
+    const fallbackUrl = 'https://chatgpt.com/g/g-69080c3e90808191a324742811037c96-product-description';
+    setTransientResponse(result, 'Sending...');
+    messages.scrollTop = messages.scrollHeight;
+
     try {
-      await send({ type: 'SEND_TO_CHATGPT', text: sourceText });
-      gptBtn.textContent = 'Sent';
-      setTimeout(() => { gptBtn.textContent = 'Product Desc'; gptBtn.disabled = false; }, 3000);
+      const response = await send({ type: 'SEND_TO_CHATGPT', text: sourceText });
+      const url = response?.url || fallbackUrl;
+      setResponseHtml(
+        result,
+        `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
+        `Sent: ${url}`
+      );
+      setActionIconState(gptBtn, 'done', 'Product Description sent');
+      setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
     } catch (e) {
-      gptBtn.textContent = 'Error';
-      setTimeout(() => { gptBtn.textContent = 'Product Desc'; gptBtn.disabled = false; }, 3000);
+      result.className = 'msg msg-error';
+      setTransientResponse(result, `Product Description error: ${escHtml(e.message)}`);
+      setActionIconState(gptBtn, 'error', 'Product Description error');
+      setTimeout(() => { setActionIconState(gptBtn, 'product', 'Product Description'); gptBtn.disabled = false; }, 3000);
     }
   }
 
   async function fireGemini(btn, kind, gemId, label, thinking) {
     if (msgEl.dataset.editing === 'true') saveResponseEdit(msgEl);
+    const actionLabel = kind === 'bullets' ? 'Bullet Points' : kind === 'image' ? 'Image Prompt' : label;
     const text = currentText.trim();
-    appendSelection(label);
-    const { wrap, result } = ensureResultBlock(kind);
-    const existingActions = wrap.querySelector('.analysis-result-actions');
-    existingActions?.remove();
+    if (!text) return '';
+    appendSelection(actionLabel);
+    const { wrap, result } = createResultBlock(kind);
     messages.appendChild(wrap);
     btn.disabled = true;
     result.className = 'msg msg-gemini';
@@ -425,6 +518,7 @@ function appendAnalysisMessage(rawText) {
     messages.scrollTop = messages.scrollHeight;
     try {
       const { content } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
+      const responseText = content || '';
       result.dataset.rawText = content || '';
       setResponseHtml(
         result,
@@ -436,27 +530,40 @@ function appendAnalysisMessage(rawText) {
       if (kind === 'bullets' && content) {
         const gptActions = responseActionsRow(result);
         gptActions.querySelector('.btn-gpt')?.remove();
-        const gptBtn = document.createElement('button');
-        gptBtn.className = 'btn btn-gpt btn-sm';
-        gptBtn.textContent = 'Product Desc';
+        const gptBtn = createActionIconButton('product', 'Product Description', 'btn-gpt');
         gptBtn.addEventListener('click', () => sendProductDesc(result.dataset.rawText || content, gptBtn));
         gptActions.insertBefore(gptBtn, gptActions.querySelector('.msg-edit-btn'));
       }
+      return responseText;
     } catch (e) {
       result.className = 'msg msg-error';
       setTransientResponse(result, `Gemini error: ${escHtml(e.message)}`);
+      return '';
     } finally {
       btn.disabled = false;
-      btn.textContent = label;
+      setActionIconState(btn, kind, actionLabel);
       messages.scrollTop = messages.scrollHeight;
     }
   }
 
   bulletsBtn.addEventListener('click', () =>
-    fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', '✦ Bullet Points', 'Creating bullet points…'));
+    fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', 'Bullet Points', 'Creating bullet points...'));
 
   imageBtn.addEventListener('click', () =>
-    fireGemini(imageBtn, 'image', '6a7373766848', '✦ Image Prompt', 'Generating image prompt…'));
+    fireGemini(imageBtn, 'image', '6a7373766848', 'Image Prompt', 'Generating image prompt...'));
+
+  comboBtn.addEventListener('click', async () => {
+    comboBtn.disabled = true;
+    setActionIconState(comboBtn, 'loading', 'Running combination flow');
+    try {
+      const bulletText = await fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', 'Bullet Points', 'Creating bullet points...');
+      await fireGemini(imageBtn, 'image', '6a7373766848', 'Image Prompt', 'Generating image prompt...');
+      if (bulletText) await sendProductDesc(bulletText);
+    } finally {
+      comboBtn.disabled = false;
+      setActionIconState(comboBtn, 'combo', 'Run Bullet Points, Image Prompt, and Product Description');
+    }
+  });
 
   messages.scrollTop = messages.scrollHeight;
 }

@@ -521,7 +521,7 @@ select option { background: var(--surface-strong); }
 }
 
 .msg-body-editing {
-  min-height: 108px;
+  min-height: calc(1lh + 14px);
   padding: 7px;
   background: var(--surface-strong);
   border: 1px solid #bdbeb5;
@@ -1040,6 +1040,46 @@ input[type="url"] {
 .btn-gpt:hover:not(:disabled) {
   background: var(--chip-hover);
   border-color: #e4d64a;
+}
+
+.action-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(11, 11, 10, 0.08);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--ink);
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, transform 0.15s;
+}
+
+.action-icon-btn:hover:not(:disabled) {
+  background: var(--chip-hover);
+  border-color: #e4d64a;
+  transform: translateY(-1px);
+}
+
+.action-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.action-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
+.action-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(11, 11, 10, 0.22);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
 }
 
 .analysis-actions {

@@ -867,6 +867,20 @@ function parseGeminiResponse(raw) {
 
 const CHATGPT_GPT_URL = 'https://chatgpt.com/g/g-69080c3e90808191a324742811037c96-product-description';
 
+async function waitForChatGPTConversationUrl(tabId, fallbackUrl) {
+  const deadline = Date.now() + 20000;
+  while (Date.now() < deadline) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (tab?.url?.includes('/c/')) return tab.url;
+    } catch {
+      return fallbackUrl;
+    }
+    await sleep(500);
+  }
+  return fallbackUrl;
+}
+
 async function sendToChatGPT(text) {
   const tab = await chrome.tabs.create({ url: CHATGPT_GPT_URL });
   const tabId = tab.id;
@@ -922,7 +936,8 @@ async function sendToChatGPT(text) {
     args: [text],
   });
 
-  return result?.result ?? { ok: false };
+  const url = await waitForChatGPTConversationUrl(tabId, CHATGPT_GPT_URL);
+  return { ...(result?.result ?? { ok: false }), url };
 }
 
 // ─── Amazon Upload ───────────────────────────────────────────────────────────
