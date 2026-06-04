@@ -1,3 +1,0 @@
-Creative Automation updater test file.
-
-If this file appears after running update.ps1, the Windows-native updater downloaded and copied the latest repository files successfully.
