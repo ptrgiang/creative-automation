@@ -10,7 +10,7 @@ The extension is designed for repeated operational work: select or create a Note
   - List, select, create, and rename notebooks.
   - Add URL sources and upload files.
   - Ask notebook questions from the side panel.
-  - Clear local conversation history for the current chat.
+  - Clear saved local automation history without deleting NotebookLM chat.
 - **Amazon Search workflow**
   - Reads Compare Listings data from `https://amazon-crawler.netlify.app/`.
   - Creates a NotebookLM notebook from selected listings.
@@ -19,7 +19,7 @@ The extension is designed for repeated operational work: select or create a Note
 - **Response actions**
   - Edit and copy generated responses.
   - Generate Bullet Points and Image Prompt outputs from NotebookLM analysis.
-  - Send Bullet Points output to ChatGPT as Product Desc.
+  - Send Bullet Points output to ChatGPT as Product Description.
 - **Focused side-panel UI**
   - No popup surface; clicking the extension action opens the side panel.
   - Light Creative Automation theme with compact controls, skeleton loading states, and operational spacing.
@@ -36,14 +36,52 @@ The extension is designed for repeated operational work: select or create a Note
 
 ## Installation
 
-1. Clone or download this repository.
-2. Open Chrome and go to `chrome://extensions`.
-3. Enable **Developer mode**.
-4. Click **Load unpacked**.
-5. Select the repository folder.
-6. Click the Creative Automation toolbar icon to open the side panel.
+### Download with Windows PowerShell
+
+Open PowerShell and run:
+
+```powershell
+$Zip = "$env:TEMP\creative-automation-main.zip"
+$Out = "$env:USERPROFILE\CreativeAutomation"
+Invoke-WebRequest "https://github.com/ptrgiang/creative-automation/archive/refs/heads/main.zip" -OutFile $Zip
+Remove-Item $Out -Recurse -Force -ErrorAction SilentlyContinue
+Expand-Archive $Zip -DestinationPath $env:USERPROFILE -Force
+Rename-Item "$env:USERPROFILE\creative-automation-main" "CreativeAutomation"
+Write-Host "Extension folder: $Out"
+```
+
+Then load the extension:
+
+1. Open Chrome and go to `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Click **Load unpacked**.
+4. Select:
+
+```powershell
+$env:USERPROFILE\CreativeAutomation
+```
+
+5. Click the Creative Automation toolbar icon to open the side panel.
 
 If NotebookLM requests login, open NotebookLM in a normal browser tab, sign in, then retry from the side panel.
+
+## Update Automatically
+
+Automatic updates do not require Git. From the extension folder, run:
+
+```powershell
+Set-Location "$env:USERPROFILE\CreativeAutomation"
+.\update.ps1
+```
+
+If PowerShell blocks local scripts, run:
+
+```powershell
+Set-Location "$env:USERPROFILE\CreativeAutomation"
+powershell -ExecutionPolicy Bypass -File .\update.ps1
+```
+
+After updating, open `chrome://extensions` and click the reload icon for Creative Automation.
 
 ## Workflow
 
@@ -95,6 +133,7 @@ The extension requests:
 - `content-amazon.js` - Amazon Search compare-state bridge.
 - `icons/` - Extension icon PNG assets.
 - `generate-icons.html` - Local icon regeneration helper.
+- `update.ps1` - Windows PowerShell helper for downloading the latest extension files.
 
 ## Manual QA Before Publishing
 
