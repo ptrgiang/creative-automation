@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Creative Automation",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automate NotebookLM workflows for Amazon research, source uploads, AI summaries, prompts, and product descriptions.",
   "permissions": ["cookies", "storage", "sidePanel", "tabs", "scripting"],
   "host_permissions": [

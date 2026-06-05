@@ -16,6 +16,19 @@ const state = {
 };
 
 const LOCAL_AUTOMATION_STORAGE_PREFIX = 'creativeAutomation:actions:';
+const CREATE_IMAGE_PROMPT_PREFIX = 'Dựa vào các ảnh sản phẩm được cung cấp, hãy tạo bộ 9 ảnh tách biệt, với nội dung và mô tả của 9 ảnh như ở dưới đây:';
+const CREATE_IMAGE_PROMPT_SUFFIX = `⚠️ **QUY TẮC THIẾT KẾ BẮT BUỘC (BlueStars Brand Guidelines)**
+**Kích thước ảnh**
+- Tỉ lệ: Vuông 1:1
+**Màu sắc thương hiệu**
+- Brand Blue (primary): #0000B4
+- Brand Blue (dark): #000097
+**Typography**
+- Font text cho toàn bộ ảnh: **Roboto**
+**Logo BlueStars (bắt buộc mỗi ảnh)**
+- Đặt ở góc trên bên phải
+- Kích thước vừa phải, đồng đều ở các ảnh, không lấn át nội dung chính
+Chỉ sử dụng các hình ảnh sản phẩm được cung cấp làm tài liệu tham khảo DUY NHẤT cho thiết kế sản phẩm. KHÔNG được thay đổi hình dạng, cấu trúc, tỷ lệ hoặc chi tiết của sản phẩm.`;
 let localAutomationSequence = 0;
 const localAutomationWriteQueues = new Map();
 
@@ -306,9 +319,61 @@ function startResponseEdit(el) {
   selection.addRange(range);
 }
 
+function responseBodyToMarkdown(body) {
+  const inlineMarkdown = node => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const tag = node.tagName.toLowerCase();
+    const inner = Array.from(node.childNodes).map(inlineMarkdown).join('');
+    if (tag === 'br') return '\n';
+    if (tag === 'strong' || tag === 'b') return `**${inner}**`;
+    if (tag === 'em' || tag === 'i') return `*${inner}*`;
+    if (tag === 'cite') return `[${inner}]`;
+    return inner;
+  };
+
+  const blockMarkdown = (node, indent = 0, index = 0, ordered = false) => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'p') return `${inlineMarkdown(node).trim()}\n\n`;
+    if (tag === 'br') return '\n';
+    if (tag === 'hr') return '---\n\n';
+    if (tag === 'ul' || tag === 'ol') {
+      return Array.from(node.children)
+        .filter(child => child.tagName?.toLowerCase() === 'li')
+        .map((child, childIndex) => blockMarkdown(child, indent, childIndex, tag === 'ol'))
+        .join('');
+    }
+    if (tag === 'li') {
+      const prefix = ordered ? `${index + 1}. ` : '- ';
+      const nested = Array.from(node.children).filter(child => ['ul', 'ol'].includes(child.tagName?.toLowerCase()));
+      const nestedText = nested.map(child => blockMarkdown(child, indent + 2)).join('');
+      const clone = node.cloneNode(true);
+      clone.querySelectorAll('ul, ol').forEach(list => list.remove());
+      return `${' '.repeat(indent)}${prefix}${inlineMarkdown(clone).trim()}\n${nestedText}`;
+    }
+    if (node.classList?.contains('md-h')) {
+      const levelMatch = Array.from(node.classList).find(name => /^md-h[1-6]$/.test(name));
+      const level = levelMatch ? Number(levelMatch.replace('md-h', '')) : 3;
+      return `${'#'.repeat(level)} ${inlineMarkdown(node).trim()}\n\n`;
+    }
+    return `${Array.from(node.childNodes).map(child => blockMarkdown(child, indent)).join('').trim()}\n\n`;
+  };
+
+  return Array.from(body.childNodes)
+    .map(node => blockMarkdown(node))
+    .join('')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function saveResponseEdit(el) {
   const body = messageBody(el);
-  const nextText = body.innerText.trim() || el.dataset.copyText || '';
+  const nextText = responseBodyToMarkdown(body) || el.dataset.copyText || '';
   const nextHtml = body.innerHTML || renderMarkdown(nextText);
   const btn = responseActionsRow(el).querySelector('.msg-edit-btn');
   body.contentEditable = 'false';
@@ -454,6 +519,45 @@ async function sendProductDesc(sourceText, gptBtn) {
   }
 }
 
+function composeCreateImagePrompt(sourceText) {
+  return `${CREATE_IMAGE_PROMPT_PREFIX}\n\n${(sourceText || '').trim()}\n\n${CREATE_IMAGE_PROMPT_SUFFIX}`;
+}
+
+function currentResponseMarkdown(el, fallback = '') {
+  if (el?.dataset.editing === 'true') saveResponseEdit(el);
+  const bodyText = el ? responseBodyToMarkdown(messageBody(el)) : '';
+  return bodyText || el?.dataset.rawText || el?.dataset.copyText || fallback || '';
+}
+
+async function draftCreateImagePrompt(sourceText, imageBtn) {
+  if (imageBtn) {
+    imageBtn.disabled = true;
+    setActionIconState(imageBtn, 'loading', 'Opening Create Image draft');
+  }
+
+  try {
+    const response = await send({ type: 'DRAFT_CHATGPT_PROMPT', text: composeCreateImagePrompt(sourceText) });
+    if (response?.ok === false) {
+      throw new Error(response.reason || 'Could not fill ChatGPT prompt');
+    }
+    if (imageBtn) {
+      setActionIconState(imageBtn, 'done', 'Create Image draft opened');
+      setTimeout(() => {
+        setActionIconState(imageBtn, 'create-image', 'Create Image');
+        imageBtn.disabled = false;
+      }, 1800);
+    }
+  } catch (e) {
+    if (imageBtn) {
+      setActionIconState(imageBtn, 'error', `Create Image error: ${e.message}`);
+      setTimeout(() => {
+        setActionIconState(imageBtn, 'create-image', 'Create Image');
+        imageBtn.disabled = false;
+      }, 3000);
+    }
+  }
+}
+
 function actionIconSvg(kind) {
   if (kind === 'bullets') {
     return `
@@ -484,6 +588,15 @@ function actionIconSvg(kind) {
     return `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M4 6h5l2 3M4 18h5l2-3M13 9l2 3-2 3M15 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  }
+  if (kind === 'create-image') {
+    return `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M5 20h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3l-1.5-2h-5L8 6H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="12" cy="13" r="3.2" stroke="currentColor" stroke-width="2"/>
+        <path d="M18 11v.01" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
       </svg>
     `;
   }
@@ -561,9 +674,18 @@ function attachProductDescriptionAction(result, sourceText, sendFn = sendProduct
   const gptActions = responseActionsRow(result);
   gptActions.querySelector('.btn-gpt')?.remove();
   const gptBtn = createActionIconButton('product', 'Product Description', 'btn-gpt');
-  gptBtn.addEventListener('click', () => sendFn(result.dataset.rawText || sourceText, gptBtn));
+  gptBtn.addEventListener('click', () => sendFn(currentResponseMarkdown(result, sourceText), gptBtn));
   gptActions.insertBefore(gptBtn, gptActions.querySelector('.msg-edit-btn'));
   return gptBtn;
+}
+
+function attachCreateImageAction(result, sourceText, sendFn = draftCreateImagePrompt) {
+  const imageActions = responseActionsRow(result);
+  imageActions.querySelector('.btn-create-image')?.remove();
+  const imageBtn = createActionIconButton('create-image', 'Create Image', 'btn-create-image');
+  imageBtn.addEventListener('click', () => sendFn(currentResponseMarkdown(result, sourceText), imageBtn));
+  imageActions.insertBefore(imageBtn, imageActions.querySelector('.msg-edit-btn'));
+  return imageBtn;
 }
 
 function addGeminiActionsToResponse(msgEl, getText) {
@@ -629,6 +751,9 @@ function addGeminiActionsToResponse(msgEl, getText) {
 
       if (kind === 'bullets' && content) {
         attachProductDescriptionAction(result, content);
+      }
+      if (kind === 'image' && content) {
+        attachCreateImageAction(result, content);
       }
       return responseText;
     } catch (e) {
@@ -726,6 +851,9 @@ function appendSavedLocalAutomationItem(item) {
 
   if (item.kind === 'bullets') {
     attachProductDescriptionAction(el, item.rawText || item.copyText || item.text || '');
+  }
+  if (item.kind === 'image') {
+    attachCreateImageAction(el, item.rawText || item.copyText || item.text || '');
   }
   messages.scrollTop = messages.scrollHeight;
   return el;
@@ -862,6 +990,9 @@ function appendAnalysisMessage(rawText) {
 
       if (kind === 'bullets' && content) {
         attachProductDescriptionAction(result, content, sendProductDesc);
+      }
+      if (kind === 'image' && content) {
+        attachCreateImageAction(result, content);
       }
       return responseText;
     } catch (e) {
@@ -1188,18 +1319,29 @@ function closeAccountPicker() {
 
 async function switchGoogleAccount(index, email) {
   if (!Number.isInteger(index)) return;
+  const previousAuthUser = state.selectedAuthUser;
+  const previousEmail = state.selectedAccountEmail;
+  const selectedAccount = state.accounts.find(account => account.index === index);
+
+  state.selectedAuthUser = index;
+  state.selectedAccountEmail = email || selectedAccount?.email || '';
+  renderAccountPicker();
   showLoading(true, 'Switching Google account...');
+
   try {
-    await send({ type: 'SET_GOOGLE_ACCOUNT', index, email });
-    state.selectedAuthUser = index;
-    state.selectedAccountEmail = email;
+    const result = await send({ type: 'SET_GOOGLE_ACCOUNT', index, email: state.selectedAccountEmail });
+    state.selectedAuthUser = Number.isInteger(result.selectedAuthUser) ? result.selectedAuthUser : index;
+    state.selectedAccountEmail = result.selectedEmail || state.selectedAccountEmail;
     state.selectedNotebookId = null;
     state.conversationId = null;
     messages.innerHTML = '';
-    await loadGoogleAccounts();
+    renderAccountPicker();
     await loadNotebooks();
     await selectNotebook('');
   } catch (e) {
+    state.selectedAuthUser = previousAuthUser;
+    state.selectedAccountEmail = previousEmail;
+    renderAccountPicker();
     appendMessage('error', `Could not switch Google account: ${e.message}`);
   } finally {
     showLoading(false);

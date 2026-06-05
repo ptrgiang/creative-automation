@@ -918,11 +918,9 @@ async function sendToGemini(rawText, gemId = GEMS.bullets) {
   const sid = makeUUID();
   const gemUrl = accountUrl(`${GEMINI_BASE}/gem/${gemId}`, account);
 
-  // Conversation context: 10-element array (positions 0,1,9 hold IDs for continuation)
-  const convCtx = geminiAuth.conversationId
-    ? [geminiAuth.conversationId, geminiAuth.responseId || '', geminiAuth.choiceId || '',
-       null, null, null, null, null, null, '']
-    : ['', '', '', null, null, null, null, null, null, ''];
+  // Keep automation actions stateless so Bullet Points, Image Prompt, and
+  // follow-up runs never inherit another Gemini thread's context.
+  const convCtx = ['', '', '', null, null, null, null, null, null, ''];
 
   // Inner array structure reverse-engineered from real curl.
   // Gem ID sits at index 19; session UUID at index 59.
@@ -1039,6 +1037,7 @@ function parseGeminiResponse(raw) {
 // ─── ChatGPT DOM injection ───────────────────────────────────────────────────
 
 const CHATGPT_GPT_URL = 'https://chatgpt.com/g/g-69080c3e90808191a324742811037c96-product-description';
+const CHATGPT_URL = 'https://chatgpt.com/';
 
 async function waitForChatGPTConversationUrl(tabId, fallbackUrl) {
   const deadline = Date.now() + 20000;
@@ -1054,8 +1053,8 @@ async function waitForChatGPTConversationUrl(tabId, fallbackUrl) {
   return fallbackUrl;
 }
 
-async function sendToChatGPT(text) {
-  const tab = await chrome.tabs.create({ url: CHATGPT_GPT_URL });
+async function openChatGPTWithPrompt(text, { url = CHATGPT_URL, submit = false } = {}) {
+  const tab = await chrome.tabs.create({ url });
   const tabId = tab.id;
 
   // Wait for page to reach 'complete'
@@ -1078,9 +1077,47 @@ async function sendToChatGPT(text) {
 
   const [result] = await chrome.scripting.executeScript({
     target: { tabId },
-    func: (inputText) => {
+    func: (inputText, shouldSubmit) => {
       const editor = document.querySelector('#prompt-textarea');
       if (!editor) return { ok: false, reason: 'editor not found' };
+      const composerHasPrompt = value => {
+        const expected = String(value || '').slice(0, 40).trim();
+        if (!expected) return true;
+        return (editor.innerText || editor.textContent || '').includes(expected);
+      };
+      const setPlainTextParagraphs = value => {
+        const text = String(value || '').replace(/\r\n/g, '\n');
+        editor.innerHTML = '';
+
+        for (const line of text.split('\n')) {
+          const p = document.createElement('p');
+          if (line) p.appendChild(document.createTextNode(line));
+          else p.appendChild(document.createElement('br'));
+          editor.appendChild(p);
+        }
+
+        editor.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          inputType: 'insertText',
+          data: text,
+        }));
+        return composerHasPrompt(text);
+      };
+      const pastePlainText = value => {
+        try {
+          const data = new DataTransfer();
+          data.setData('text/plain', String(value || ''));
+          const event = new ClipboardEvent('paste', {
+            bubbles: true,
+            cancelable: true,
+            clipboardData: data,
+          });
+          editor.dispatchEvent(event);
+          return true;
+        } catch {
+          return false;
+        }
+      };
 
       editor.focus();
       editor.click();
@@ -1088,7 +1125,16 @@ async function sendToChatGPT(text) {
       // Clear then insert into ProseMirror via execCommand
       document.execCommand('selectAll', false, null);
       document.execCommand('delete', false, null);
-      const ok = document.execCommand('insertText', false, inputText);
+      let ok = shouldSubmit
+        ? document.execCommand('insertText', false, inputText)
+        : setPlainTextParagraphs(inputText);
+      if (!ok || !composerHasPrompt(inputText)) {
+        document.execCommand('selectAll', false, null);
+        document.execCommand('delete', false, null);
+        ok = shouldSubmit
+          ? pastePlainText(inputText) && composerHasPrompt(inputText)
+          : document.execCommand('insertText', false, inputText) && composerHasPrompt(inputText);
+      }
 
       if (!ok) {
         // Fallback: set p content directly and fire input event
@@ -1099,18 +1145,30 @@ async function sendToChatGPT(text) {
         }
       }
 
-      setTimeout(() => {
-        const btn = document.querySelector('#composer-submit-button');
-        if (btn && !btn.disabled) btn.click();
-      }, 300);
+      if (shouldSubmit) {
+        setTimeout(() => {
+          const btn = document.querySelector('#composer-submit-button');
+          if (btn && !btn.disabled) btn.click();
+        }, 300);
+      }
 
       return { ok: true };
     },
-    args: [text],
+    args: [text, submit],
   });
 
-  const url = await waitForChatGPTConversationUrl(tabId, CHATGPT_GPT_URL);
-  return { ...(result?.result ?? { ok: false }), url };
+  if (!submit) return { ...(result?.result ?? { ok: false }), url };
+
+  const conversationUrl = await waitForChatGPTConversationUrl(tabId, CHATGPT_GPT_URL);
+  return { ...(result?.result ?? { ok: false }), url: conversationUrl };
+}
+
+async function sendToChatGPT(text) {
+  return openChatGPTWithPrompt(text, { url: CHATGPT_GPT_URL, submit: true });
+}
+
+async function draftChatGPTPrompt(text) {
+  return openChatGPTWithPrompt(text, { url: CHATGPT_URL, submit: false });
 }
 
 // ─── Amazon Upload ───────────────────────────────────────────────────────────
@@ -1370,7 +1428,7 @@ async function handleMessage(msg) {
       await storageSet({ [GOOGLE_ACCOUNT_STORAGE_KEY]: selectedGoogleAccount });
       resetNotebookAuth();
       resetGeminiAuth();
-      return await refreshExternalSessions();
+      return { ok: true, selectedAuthUser: selectedGoogleAccount.index, selectedEmail: selectedGoogleAccount.email };
     }
 
     case 'LIST_NOTEBOOKS': {
@@ -1511,6 +1569,11 @@ async function handleMessage(msg) {
 
     case 'SEND_TO_CHATGPT': {
       const result = await sendToChatGPT(stripForGemini(msg.text));
+      return result;
+    }
+
+    case 'DRAFT_CHATGPT_PROMPT': {
+      const result = await draftChatGPTPrompt(msg.text || '');
       return result;
     }
 

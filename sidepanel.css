@@ -544,7 +544,7 @@ select option { background: var(--surface-strong); }
   color: var(--muted);
   cursor: pointer;
   opacity: 0.86;
-  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s, transform 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
 }
 
 .msg-actions-row {
@@ -574,7 +574,6 @@ select option { background: var(--surface-strong); }
   border-color: #e4d64a;
   color: var(--ink);
   opacity: 1;
-  transform: translateY(-1px);
 }
 
 .msg-edit-btn.editing {
@@ -1066,13 +1065,12 @@ input[type="url"] {
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--ink);
-  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, transform 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
 }
 
 .action-icon-btn:hover:not(:disabled) {
   background: var(--chip-hover);
   border-color: #e4d64a;
-  transform: translateY(-1px);
 }
 
 .action-icon-btn:focus-visible {
