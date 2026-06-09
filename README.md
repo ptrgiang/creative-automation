@@ -36,11 +36,19 @@ The extension is designed for repeated operational work: select or create a Note
 
 ## Installation
 
-### Download
+### Download with Windows PowerShell
 
-Download and extract the latest ZIP:
+Open PowerShell and run:
 
-[Download Creative Automation](https://github.com/ptrgiang/creative-automation/archive/refs/heads/main.zip)
+```powershell
+$Zip = "$env:TEMP\creative-automation-main.zip"
+$Out = "$env:USERPROFILE\CreativeAutomation"
+Invoke-WebRequest "https://github.com/ptrgiang/creative-automation/archive/refs/heads/main.zip" -OutFile $Zip
+Remove-Item $Out -Recurse -Force -ErrorAction SilentlyContinue
+Expand-Archive $Zip -DestinationPath $env:USERPROFILE -Force
+Rename-Item "$env:USERPROFILE\creative-automation-main" "CreativeAutomation"
+Write-Host "Extension folder: $Out"
+```
 
 Then load the extension:
 
@@ -49,7 +57,9 @@ Then load the extension:
 3. Click **Load unpacked**.
 4. Select:
 
-Your extracted `CreativeAutomation` folder.
+```powershell
+$env:USERPROFILE\CreativeAutomation
+```
 
 5. Click the Creative Automation toolbar icon to open the side panel.
 
