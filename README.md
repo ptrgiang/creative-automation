@@ -36,19 +36,11 @@ The extension is designed for repeated operational work: select or create a Note
 
 ## Installation
 
-### Download with Windows PowerShell
+### Download
 
-Open PowerShell and run:
+Download and extract the latest ZIP:
 
-```powershell
-$Zip = "$env:TEMP\creative-automation-main.zip"
-$Out = "$env:USERPROFILE\CreativeAutomation"
-Invoke-WebRequest "https://github.com/ptrgiang/creative-automation/archive/refs/heads/main.zip" -OutFile $Zip
-Remove-Item $Out -Recurse -Force -ErrorAction SilentlyContinue
-Expand-Archive $Zip -DestinationPath $env:USERPROFILE -Force
-Rename-Item "$env:USERPROFILE\creative-automation-main" "CreativeAutomation"
-Write-Host "Extension folder: $Out"
-```
+[Download Creative Automation](https://github.com/ptrgiang/creative-automation/archive/refs/heads/main.zip)
 
 Then load the extension:
 
@@ -57,33 +49,22 @@ Then load the extension:
 3. Click **Load unpacked**.
 4. Select:
 
-```powershell
-$env:USERPROFILE\CreativeAutomation
-```
+Your extracted `CreativeAutomation` folder.
 
 5. Click the Creative Automation toolbar icon to open the side panel.
 
 If NotebookLM requests login, open NotebookLM in a normal browser tab, sign in, then retry from the side panel.
 
-## Update Automatically
+## Update
 
-Automatic updates do not require Git. From the extension folder, run:
+Windows users can update with one click:
 
-```powershell
-Set-Location "$env:USERPROFILE\CreativeAutomation"
-.\update.ps1
-```
+1. Double-click `update.exe` inside the extension folder.
+2. Wait for the update to finish.
+3. Open `chrome://extensions`.
+4. Click the reload icon for Creative Automation.
 
-If PowerShell blocks local scripts, run:
-
-```powershell
-Set-Location "$env:USERPROFILE\CreativeAutomation"
-powershell -ExecutionPolicy Bypass -File .\update.ps1
-```
-
-After updating, open `chrome://extensions` and click the reload icon for Creative Automation.
-
-The updater mirrors the latest repository files into your extension folder, so files removed from the repository are removed locally too. It saves a backup in your Windows temp folder before changing files.
+The updater downloads the latest GitHub ZIP, saves a backup in your Windows temp folder, mirrors updated files, and keeps `update.exe` in place.
 
 ## Workflow
 
@@ -138,7 +119,8 @@ The extension requests:
 - `content-amazon.js` - Amazon Search compare-state bridge.
 - `icons/` - Extension icon PNG assets.
 - `generate-icons.html` - Local icon regeneration helper.
-- `update.ps1` - Windows PowerShell helper for mirroring the latest extension files.
+- `update.exe` - one-click Windows updater.
+- `update.cs` - source code for the Windows updater.
 
 ## Manual QA Before Publishing
 
