@@ -2629,3 +2629,164 @@ header {
 .account-picker-menu {
   z-index: 130;
 }
+
+.input-row {
+  position: relative;
+}
+
+.prompt-menu {
+  position: absolute;
+  left: 42px;
+  right: 42px;
+  bottom: calc(100% + 8px);
+  z-index: 24;
+  max-height: min(260px, 55vh);
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface-strong);
+  border: 1px solid rgba(11, 11, 10, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 16px 34px rgba(24, 24, 21, 0.16), 0 1px 0 rgba(255, 255, 255, 0.92) inset;
+}
+
+.prompt-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.prompt-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.prompt-menu::-webkit-scrollbar-thumb {
+  background: rgba(11, 11, 10, 0.2);
+  border: 2px solid var(--surface-strong);
+  border-radius: 999px;
+}
+
+.prompt-menu-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+}
+
+.prompt-menu-name,
+.prompt-menu-add,
+.prompt-menu-icon {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--display-font);
+  transition: background 0.15s, color 0.15s;
+}
+
+.prompt-menu-name {
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.prompt-menu-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.prompt-menu-name:hover,
+.prompt-menu-name:focus-visible,
+.prompt-menu-icon:hover,
+.prompt-menu-icon:focus-visible,
+.prompt-menu-add:hover,
+.prompt-menu-add:focus-visible {
+  background: var(--chip-hover);
+  color: var(--ink);
+  outline: none;
+}
+
+.prompt-menu-add {
+  width: 100%;
+  min-height: 32px;
+  margin-top: 4px;
+  padding: 0 8px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+}
+
+.prompt-menu-empty {
+  padding: 9px 8px;
+  color: var(--muted);
+  font-family: var(--display-font);
+  font-size: 12px;
+}
+
+.prompt-dialog-card {
+  width: min(100%, 340px);
+}
+
+.prompt-dialog-content {
+  display: grid;
+  gap: 8px;
+}
+
+.prompt-field {
+  display: grid;
+  gap: 5px;
+  font-family: var(--display-font);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.prompt-field input,
+.prompt-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(11, 11, 10, 0.11);
+  border-radius: 8px;
+  background: var(--shell);
+  color: var(--ink);
+  font-family: var(--ui-font);
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(11, 11, 10, 0.03);
+}
+
+.prompt-field input {
+  height: 34px;
+  padding: 7px 9px;
+}
+
+.prompt-field textarea {
+  flex: initial;
+  height: 128px;
+  min-height: 112px;
+  max-height: 220px;
+  padding: 8px 9px;
+}
+
+.prompt-field input:focus,
+.prompt-field textarea:focus {
+  border-color: #5b8ddc;
+  box-shadow: 0 0 0 3px rgba(91, 141, 220, 0.18);
+}
+
+.prompt-dialog-error {
+  min-height: 16px;
+  color: var(--red);
+  font-size: 11px;
+  line-height: 1.35;
+}

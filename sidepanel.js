@@ -13,9 +13,12 @@ const state = {
   accounts: [],
   selectedAuthUser: 0,
   selectedAccountEmail: '',
+  quickPrompts: [],
+  editingPromptId: null,
 };
 
 const LOCAL_AUTOMATION_STORAGE_PREFIX = 'creativeAutomation:actions:';
+const QUICK_PROMPTS_STORAGE_KEY = 'creativeAutomation:quickPrompts';
 const CREATE_IMAGE_PROMPT_PREFIX = 'Dựa vào các ảnh sản phẩm được cung cấp, hãy tạo bộ 9 ảnh tách biệt, với nội dung và mô tả của 9 ảnh như ở dưới đây:';
 const CREATE_IMAGE_PROMPT_SUFFIX = `⚠️ **QUY TẮC THIẾT KẾ BẮT BUỘC (BlueStars Brand Guidelines)**
 **Kích thước ảnh**
@@ -104,7 +107,17 @@ const messages       = $('messages');
 const queryInput     = $('query-input');
 const sendBtn        = $('send-btn');
 const clearChat      = $('clear-chat');
+const promptMenu     = $('prompt-menu');
+const promptDialog   = $('prompt-dialog');
+const promptDialogTitle = $('prompt-dialog-title');
+const promptNameInput = $('prompt-name-input');
+const promptTextInput = $('prompt-text-input');
+const promptDialogError = $('prompt-dialog-error');
+const promptCancel   = $('prompt-cancel');
+const promptSave     = $('prompt-save');
 const confirmDialog  = $('confirm-dialog');
+const confirmTitle   = $('confirm-title');
+const confirmMessage = $('confirm-message');
 const confirmOk      = $('confirm-ok');
 const confirmCancel  = $('confirm-cancel');
 const sourcesList    = $('sources-list');
@@ -263,6 +276,38 @@ function persistLocalAutomationItem(item) {
   return saveLocalAutomationItem(item).catch(showLocalAutomationStorageError);
 }
 
+function makeQuickPromptId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeQuickPrompt(item) {
+  const now = Date.now();
+  return {
+    id: item.id || makeQuickPromptId(),
+    name: String(item.name || '').trim(),
+    prompt: String(item.prompt || '').trim(),
+    createdAt: item.createdAt || now,
+    updatedAt: item.updatedAt || item.createdAt || now,
+  };
+}
+
+async function loadQuickPrompts() {
+  const items = await storageGet(QUICK_PROMPTS_STORAGE_KEY).catch(() => []);
+  state.quickPrompts = Array.isArray(items)
+    ? items.map(normalizeQuickPrompt).filter(item => item.name && item.prompt)
+    : [];
+  renderPromptMenu();
+}
+
+async function saveQuickPrompts() {
+  await storageSet({ [QUICK_PROMPTS_STORAGE_KEY]: state.quickPrompts });
+}
+
+function quickPromptNameExists(name, exceptId = '') {
+  const normalized = String(name || '').trim().toLowerCase();
+  return state.quickPrompts.some(item => item.id !== exceptId && item.name.toLowerCase() === normalized);
+}
+
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
 function showLoading(on, label = 'Loading workspace...') {
@@ -270,8 +315,17 @@ function showLoading(on, label = 'Loading workspace...') {
   loading.classList.toggle('hidden', !on);
 }
 
-function requestClearLocalHistoryConfirmation() {
+function requestConfirmation({
+  title = 'Are you sure?',
+  message = 'This cannot be undone.',
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+} = {}) {
   const previousFocus = document.activeElement;
+  confirmTitle.textContent = title;
+  confirmMessage.textContent = message;
+  confirmOk.textContent = confirmText;
+  confirmCancel.textContent = cancelText;
   confirmDialog.classList.remove('hidden');
   confirmCancel.focus();
 
@@ -303,6 +357,14 @@ function requestClearLocalHistoryConfirmation() {
     confirmCancel.addEventListener('click', onCancel);
     confirmDialog.addEventListener('click', onOverlayClick);
     document.addEventListener('keydown', onKeyDown);
+  });
+}
+
+function requestClearLocalHistoryConfirmation() {
+  return requestConfirmation({
+    title: 'Clear saved history?',
+    message: 'Only local automation history will be removed. NotebookLM chat stays.',
+    confirmText: 'Clear history',
   });
 }
 
@@ -1644,12 +1706,142 @@ function closeNotebookPicker() {
   notebookPickerMenu.classList.add('hidden');
 }
 
-// Auto-resize textarea (up to 120px for side panel)
-queryInput.addEventListener('input', () => {
+function resizeQueryInput() {
   queryInput.style.height = 'auto';
   queryInput.style.height = Math.min(queryInput.scrollHeight, 120) + 'px';
-  const hasText = !!queryInput.value.trim();
-  sendBtn.disabled          = !hasText || state.sending;
+}
+
+function setQueryInputValue(value) {
+  queryInput.value = value || '';
+  resizeQueryInput();
+  sendBtn.disabled = state.sending;
+}
+
+function closePromptMenu() {
+  promptMenu.classList.add('hidden');
+}
+
+function openPromptMenu() {
+  renderPromptMenu();
+  promptMenu.classList.remove('hidden');
+}
+
+function renderPromptMenu() {
+  const rows = state.quickPrompts.map(item => `
+    <div class="prompt-menu-item" role="menuitem" data-prompt-id="${escHtml(item.id)}">
+      <button class="prompt-menu-name" type="button" data-action="insert" title="${escHtml(item.name)}">${escHtml(item.name)}</button>
+      <button class="prompt-menu-icon" type="button" data-action="edit" title="Edit prompt" aria-label="Edit ${escHtml(item.name)}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M13 5l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          <path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
+        </svg>
+      </button>
+      <button class="prompt-menu-icon" type="button" data-action="delete" title="Delete prompt" aria-label="Delete ${escHtml(item.name)}">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M3 6h18M8 6V4h8v2M6 6l1 16h10l1-16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </button>
+    </div>
+  `);
+
+  promptMenu.innerHTML = `
+    ${rows.length ? rows.join('') : '<div class="prompt-menu-empty">No saved prompts yet</div>'}
+    <button class="prompt-menu-add" type="button" data-action="add">+ Add</button>
+  `;
+}
+
+function validatePromptDialog() {
+  const name = promptNameInput.value.trim();
+  const prompt = promptTextInput.value.trim();
+  const duplicate = name && quickPromptNameExists(name, state.editingPromptId || '');
+  promptDialogError.textContent = duplicate ? 'A prompt with this name already exists.' : '';
+  promptSave.disabled = !name || !prompt || duplicate;
+}
+
+function openPromptDialog(promptItem = null) {
+  state.editingPromptId = promptItem?.id || null;
+  promptDialogTitle.textContent = promptItem ? 'Edit prompt' : 'Add prompt';
+  promptNameInput.value = promptItem?.name || '';
+  promptTextInput.value = promptItem?.prompt || '';
+  promptDialogError.textContent = '';
+  promptDialog.classList.remove('hidden');
+  validatePromptDialog();
+  setTimeout(() => promptNameInput.focus(), 0);
+}
+
+function closePromptDialog() {
+  promptDialog.classList.add('hidden');
+  state.editingPromptId = null;
+}
+
+async function savePromptDialog() {
+  const name = promptNameInput.value.trim();
+  const prompt = promptTextInput.value.trim();
+  if (!name || !prompt || quickPromptNameExists(name, state.editingPromptId || '')) {
+    validatePromptDialog();
+    return;
+  }
+
+  const now = Date.now();
+  let nextPrompts;
+  if (state.editingPromptId) {
+    nextPrompts = state.quickPrompts.map(item =>
+      item.id === state.editingPromptId ? { ...item, name, prompt, updatedAt: now } : item
+    );
+  } else {
+    nextPrompts = [
+      ...state.quickPrompts,
+      normalizeQuickPrompt({ name, prompt, createdAt: now, updatedAt: now }),
+    ];
+  }
+
+  const previousPrompts = state.quickPrompts;
+  try {
+    state.quickPrompts = nextPrompts;
+    await saveQuickPrompts();
+  } catch (e) {
+    state.quickPrompts = previousPrompts;
+    renderPromptMenu();
+    promptDialogError.textContent = `Could not save prompt: ${e.message}`;
+    return;
+  }
+  closePromptDialog();
+  renderPromptMenu();
+  openPromptMenu();
+}
+
+async function deleteQuickPrompt(promptItem) {
+  const confirmed = await requestConfirmation({
+    title: 'Delete prompt?',
+    message: `Remove "${promptItem.name}" from saved prompts? This cannot be undone.`,
+    confirmText: 'Delete',
+  });
+  if (!confirmed) return;
+  const previousPrompts = state.quickPrompts;
+  state.quickPrompts = state.quickPrompts.filter(item => item.id !== promptItem.id);
+  try {
+    await saveQuickPrompts();
+  } catch (e) {
+    state.quickPrompts = previousPrompts;
+    renderPromptMenu();
+    appendMessage('error', `Could not delete prompt: ${e.message}`);
+    return;
+  }
+  renderPromptMenu();
+  openPromptMenu();
+}
+
+function insertQuickPrompt(promptItem) {
+  closePromptMenu();
+  setQueryInputValue(promptItem.prompt);
+  queryInput.focus();
+}
+
+// Auto-resize textarea (up to 120px for side panel)
+queryInput.addEventListener('input', () => {
+  resizeQueryInput();
+  sendBtn.disabled = state.sending;
+  if (queryInput.value.trim()) closePromptMenu();
 });
 
 // ─── Notebooks ────────────────────────────────────────────────────────────────
@@ -1737,12 +1929,18 @@ async function selectNotebook(id) {
 
 async function sendQuery() {
   const text = queryInput.value.trim();
-  if (!text || state.sending || !state.selectedNotebookId) return;
+  if (state.sending) return;
+  if (!text) {
+    openPromptMenu();
+    return;
+  }
+  if (!state.selectedNotebookId) return;
 
   state.sending = true;
   sendBtn.disabled = true;
+  closePromptMenu();
   queryInput.value = '';
-  queryInput.style.height = 'auto';
+  resizeQueryInput();
 
   appendMessage('user', text);
   const thinkingEl = appendThinking();
@@ -1771,7 +1969,7 @@ async function sendQuery() {
     appendMessage('error', errMsg);
   } finally {
     state.sending = false;
-    sendBtn.disabled = !queryInput.value.trim();
+    sendBtn.disabled = false;
   }
 }
 
@@ -2075,6 +2273,7 @@ async function init() {
     mainScreen.classList.remove('hidden');
     state.authed = true;
 
+    await loadQuickPrompts().catch(() => {});
     await loadGoogleAccounts().catch(() => {});
     await loadNotebooks();
     checkAmazonTab().catch(() => {});
@@ -2125,12 +2324,15 @@ accountPickerMenu.addEventListener('click', e => {
 document.addEventListener('click', () => {
   closeNotebookPicker();
   closeAccountPicker();
+  closePromptMenu();
 });
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeNotebookPicker();
     closeAccountPicker();
+    closePromptMenu();
+    if (!promptDialog.classList.contains('hidden')) closePromptDialog();
   }
 });
 
@@ -2157,7 +2359,44 @@ refreshNbs.addEventListener('click', async () => {
   }
 });
 
-sendBtn.addEventListener('click', sendQuery);
+promptMenu.addEventListener('click', async e => {
+  e.stopPropagation();
+  const actionEl = e.target.closest('[data-action]');
+  if (!actionEl) return;
+
+  const action = actionEl.dataset.action;
+  if (action === 'add') {
+    closePromptMenu();
+    openPromptDialog();
+    return;
+  }
+
+  const itemEl = actionEl.closest('[data-prompt-id]');
+  const promptItem = state.quickPrompts.find(item => item.id === itemEl?.dataset.promptId);
+  if (!promptItem) return;
+
+  if (action === 'insert') {
+    insertQuickPrompt(promptItem);
+  } else if (action === 'edit') {
+    closePromptMenu();
+    openPromptDialog(promptItem);
+  } else if (action === 'delete') {
+    await deleteQuickPrompt(promptItem);
+  }
+});
+
+promptDialog.addEventListener('click', e => {
+  if (e.target === promptDialog) closePromptDialog();
+});
+promptNameInput.addEventListener('input', validatePromptDialog);
+promptTextInput.addEventListener('input', validatePromptDialog);
+promptCancel.addEventListener('click', closePromptDialog);
+promptSave.addEventListener('click', savePromptDialog);
+
+sendBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  sendQuery();
+});
 queryInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();

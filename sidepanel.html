@@ -128,6 +128,7 @@
         <div id="messages" class="messages"></div>
         <div class="chat-footer">
           <div class="input-row">
+            <div id="prompt-menu" class="prompt-menu hidden" role="menu" aria-label="Saved prompts"></div>
             <button id="clear-chat" class="inline-tool-btn" title="Clear chat" aria-label="Clear chat">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -136,7 +137,7 @@
               </svg>
             </button>
             <textarea id="query-input" placeholder="Ask your notebook…" rows="1"></textarea>
-            <button id="send-btn" class="send-btn" disabled aria-label="Send message">
+            <button id="send-btn" class="send-btn" aria-label="Send message">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
@@ -189,6 +190,34 @@
       <div class="confirm-actions">
         <button id="confirm-cancel" class="btn btn-ghost" type="button">Cancel</button>
         <button id="confirm-ok" class="btn btn-primary confirm-primary" type="button">Clear history</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prompt dialog -->
+  <div id="prompt-dialog" class="confirm-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="prompt-dialog-title">
+    <div class="confirm-card prompt-dialog-card">
+      <div class="confirm-accent" aria-hidden="true"></div>
+      <div class="confirm-mark" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M4 5h16M4 12h16M4 19h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="confirm-content prompt-dialog-content">
+        <h2 id="prompt-dialog-title">Add prompt</h2>
+        <label class="prompt-field">
+          <span>Prompt name</span>
+          <input id="prompt-name-input" type="text" autocomplete="off">
+        </label>
+        <label class="prompt-field">
+          <span>Prompt</span>
+          <textarea id="prompt-text-input" rows="6"></textarea>
+        </label>
+        <p id="prompt-dialog-error" class="prompt-dialog-error" aria-live="polite"></p>
+      </div>
+      <div class="confirm-actions">
+        <button id="prompt-cancel" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="prompt-save" class="btn btn-primary confirm-primary" type="button" disabled>Save</button>
       </div>
     </div>
   </div>
