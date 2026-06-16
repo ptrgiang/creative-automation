@@ -29,6 +29,53 @@ const CREATE_IMAGE_PROMPT_SUFFIX = `⚠️ **QUY TẮC THIẾT KẾ BẮT BUỘC
 - Đặt ở góc trên bên phải
 - Kích thước vừa phải, đồng đều ở các ảnh, không lấn át nội dung chính
 Chỉ sử dụng các hình ảnh sản phẩm được cung cấp làm tài liệu tham khảo DUY NHẤT cho thiết kế sản phẩm. KHÔNG được thay đổi hình dạng, cấu trúc, tỷ lệ hoặc chi tiết của sản phẩm.`;
+const COMPARE_LISTINGS_PROMPT = `**Role:** You are an Amazon SEO & Listing Optimization expert.
+
+**Task:** Compare the BlueStars listing against the provided competitor listings and identify content gaps, weaknesses, and improvement opportunities.
+
+
+# Analyze the following sections:
+
+**1. Title**
+- Is it optimized compared to competitors?
+- Missing keywords, fitment info, benefits, or USP?
+- Recommendation: **No Upgrade Needed** or **Upgrade Recommended**
+- Suggested improvements.
+
+**2. Bullet Points**
+- Compare feature coverage, compatibility, materials, durability, installation, package includes, warranty, and customer support.
+- Identify missing selling points.
+- Recommendation: **No Upgrade Needed** or **Upgrade Recommended**
+- Suggested improvements.
+
+**3. Image Gallery**
+- Compare main image, feature images, compatibility image, dimensions, installation, comparison charts, package contents, and lifestyle images.
+- Identify missing image types and improvement opportunities.
+
+**4. Competitive Gaps**
+Check customer reviews from all listings to identify customer pain points and insights. Compare clarity, persuasiveness, and customer trust-building content.
+Then suggest any additional keywords, features, benefits, trust signals, or visual elements for Bullet Points & Image Gallery that BlueStars should include. (Note: Title improvement suggestions should NOT be based on the customer reviews)
+
+
+# Output Format
+
+**1. Title**
+- Status:
+- Improvement Opportunities:
+
+**2. Bullet Points**
+- Status:
+- Improvement Opportunities:
+
+**3. Images**
+- Status:
+- Improvement Opportunities:
+
+**4. Additional Suggestions for Competitive Gaps**
+(list into bullets)
+
+
+**Important:** Only recommend changes when competitors clearly outperform BlueStars. If BlueStars is already competitive, state **"No Upgrade Needed."** Focus on improvements that can increase Amazon SEO, CTR, and conversion rate.`;
 let localAutomationSequence = 0;
 const localAutomationWriteQueues = new Map();
 
@@ -630,6 +677,14 @@ async function draftCreateImagePrompt(sourceText, imageBtn) {
 }
 
 function actionIconSvg(kind) {
+  if (kind === 'compare') {
+    return `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 7h6M4 17h6M14 7h6M14 17h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M8 4l3 3-3 3M16 14l-3 3 3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  }
   if (kind === 'bullets') {
     return `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -766,11 +821,13 @@ function addGeminiActionsToResponse(msgEl, getText) {
   const msgActions = responseActionsRow(msgEl);
   if (msgActions.querySelector('.notebook-gemini-action')) return;
 
+  const compareBtn = createActionIconButton('compare', 'Compare Listings', 'btn-gem notebook-gemini-action');
   const bulletsBtn = createActionIconButton('bullets', 'Bullet Points', 'btn-gem notebook-gemini-action');
   const imageBtn = createActionIconButton('image', 'Image Prompt', 'btn-gem notebook-gemini-action');
   const comboBtn = createActionIconButton('combo', 'Run: Bullet Points → Image Prompt → Product Description', 'btn-gem notebook-gemini-action');
 
   const msgEditBtn = msgActions.querySelector('.msg-edit-btn');
+  msgActions.insertBefore(compareBtn, msgEditBtn);
   msgActions.insertBefore(bulletsBtn, msgEditBtn);
   msgActions.insertBefore(imageBtn, msgEditBtn);
   msgActions.insertBefore(comboBtn, msgEditBtn);
@@ -791,10 +848,10 @@ function addGeminiActionsToResponse(msgEl, getText) {
     return { wrap, result };
   }
 
-  async function fireGemini(btn, kind, gemId, label, thinking) {
+  async function fireGemini(btn, kind, gemId, label, thinking, overrideText = '') {
     if (msgEl.dataset.editing === 'true') saveResponseEdit(msgEl);
     const actionLabel = kind === 'bullets' ? 'Bullet Points' : kind === 'image' ? 'Image Prompt' : label;
-    const text = (getText() || '').trim();
+    const text = (overrideText || getText() || '').trim();
     if (!text) return '';
 
     appendLocalAutomationUser(kind, actionLabel);
@@ -857,6 +914,8 @@ function addGeminiActionsToResponse(msgEl, getText) {
       messages.scrollTop = messages.scrollHeight;
     }
   }
+
+  compareBtn.addEventListener('click', () => runCompareListings(compareBtn));
 
   bulletsBtn.addEventListener('click', () =>
     fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', 'Bullet Points', 'Creating bullet points...'));
@@ -969,12 +1028,14 @@ function appendAnalysisMessage(rawText) {
   setResponseHtml(msgEl, renderMarkdown(rawText), rawText, text => { currentText = text; });
   setResponseSource(msgEl, notebookSourceUrl(), 'Open NotebookLM notebook');
 
+  const compareBtn = createActionIconButton('compare', 'Compare Listings', 'btn-gem');
   const bulletsBtn = createActionIconButton('bullets', 'Bullet Points', 'btn-gem');
   const imageBtn = createActionIconButton('image', 'Image Prompt', 'btn-gem');
   const comboBtn = createActionIconButton('combo', 'Run: Bullet Points → Image Prompt → Product Description', 'btn-gem');
 
   const msgActions = responseActionsRow(msgEl);
   const msgEditBtn = msgActions.querySelector('.msg-edit-btn');
+  msgActions.insertBefore(compareBtn, msgEditBtn);
   msgActions.insertBefore(bulletsBtn, msgEditBtn);
   msgActions.insertBefore(imageBtn, msgEditBtn);
   msgActions.insertBefore(comboBtn, msgEditBtn);
@@ -1052,10 +1113,10 @@ function appendAnalysisMessage(rawText) {
     }
   }
 
-  async function fireGemini(btn, kind, gemId, label, thinking) {
+  async function fireGemini(btn, kind, gemId, label, thinking, overrideText = '') {
     if (msgEl.dataset.editing === 'true') saveResponseEdit(msgEl);
     const actionLabel = kind === 'bullets' ? 'Bullet Points' : kind === 'image' ? 'Image Prompt' : label;
-    const text = currentText.trim();
+    const text = (overrideText || currentText).trim();
     if (!text) return '';
     appendSelection(actionLabel);
     const { wrap, result } = createResultBlock(kind);
@@ -1117,6 +1178,8 @@ function appendAnalysisMessage(rawText) {
     }
   }
 
+  compareBtn.addEventListener('click', () => runCompareListings(compareBtn));
+
   bulletsBtn.addEventListener('click', () =>
     fireGemini(bulletsBtn, 'bullets', '9e495ec3e447', 'Bullet Points', 'Creating bullet points...'));
 
@@ -1150,6 +1213,50 @@ function appendThinking() {
   messages.appendChild(el);
   messages.scrollTop = messages.scrollHeight;
   return el;
+}
+
+async function runCompareListings(compareBtn) {
+  if (!state.selectedNotebookId) return '';
+
+  if (compareBtn) {
+    compareBtn.disabled = true;
+    setActionIconState(compareBtn, 'loading', 'Compare Listings');
+  }
+
+  appendMessage('user', 'Compare Listings');
+  const thinkingEl = appendThinking();
+
+  try {
+    const { answer, conversationId } = await send({
+      type: 'QUERY',
+      notebookId: state.selectedNotebookId,
+      query: COMPARE_LISTINGS_PROMPT,
+      conversationId: state.conversationId,
+    });
+
+    removeEl(thinkingEl);
+    if (conversationId) state.conversationId = conversationId;
+
+    if (answer) {
+      appendMessage('ai', answer);
+      return answer;
+    }
+
+    appendMessage('error', 'No Compare Listings response. The notebook may have no sources yet.');
+    return '';
+  } catch (e) {
+    removeEl(thinkingEl);
+    const errMsg = e.message.includes('AUTH_EXPIRED')
+      ? 'Session expired. Please visit NotebookLM and try again.'
+      : `Compare Listings error: ${e.message}`;
+    appendMessage('error', errMsg);
+    return '';
+  } finally {
+    if (compareBtn) {
+      compareBtn.disabled = false;
+      setActionIconState(compareBtn, 'compare', 'Compare Listings');
+    }
+  }
 }
 
 function removeEl(el) {
