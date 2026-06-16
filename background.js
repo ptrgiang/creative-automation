@@ -917,6 +917,9 @@ async function sendToGemini(rawText, gemId = GEMS.bullets) {
   const text = stripForGemini(rawText);
   const sid = makeUUID();
   const gemUrl = accountUrl(`${GEMINI_BASE}/gem/${gemId}`, account);
+  geminiAuth.conversationId = '';
+  geminiAuth.responseId = '';
+  geminiAuth.choiceId = '';
 
   // Keep automation actions stateless so Bullet Points, Image Prompt, and
   // follow-up runs never inherit another Gemini thread's context.
@@ -992,7 +995,13 @@ async function sendToGemini(rawText, gemId = GEMS.bullets) {
   if (!content) {
     throw new Error(`Parse failed. Raw[0..300]: ${raw.slice(0, 300)}`);
   }
-  return cleanGeminiResponse(content);
+  const conversationId = (geminiAuth.conversationId || '').replace(/^c_/, '');
+  return {
+    content: cleanGeminiResponse(content),
+    sourceUrl: conversationId
+      ? `${GEMINI_BASE}/gem/${encodeURIComponent(gemId)}/${encodeURIComponent(conversationId)}`
+      : `${GEMINI_BASE}/gem/${encodeURIComponent(gemId)}`,
+  };
 }
 
 function parseGeminiResponse(raw) {
@@ -1563,8 +1572,7 @@ async function handleMessage(msg) {
     }
 
     case 'SEND_TO_GEMINI': {
-      const content = await sendToGemini(msg.text, msg.gemId || GEMS.bullets);
-      return { content };
+      return await sendToGemini(msg.text, msg.gemId || GEMS.bullets);
     }
 
     case 'SEND_TO_CHATGPT': {

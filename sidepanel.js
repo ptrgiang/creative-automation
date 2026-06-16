@@ -32,6 +32,18 @@ Chỉ sử dụng các hình ảnh sản phẩm được cung cấp làm tài li
 let localAutomationSequence = 0;
 const localAutomationWriteQueues = new Map();
 
+function notebookSourceUrl(notebookId = state.selectedNotebookId) {
+  return notebookId ? `https://notebooklm.google.com/notebook/${encodeURIComponent(notebookId)}` : '';
+}
+
+function geminiSourceUrl(gemId) {
+  return gemId ? `https://gemini.google.com/gem/${encodeURIComponent(gemId)}` : 'https://gemini.google.com/';
+}
+
+function chatGptSourceUrl(text) {
+  return String(text || '').match(/https:\/\/chatgpt\.com\/\S+/)?.[0] || '';
+}
+
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 
 const $ = id => document.getElementById(id);
@@ -150,6 +162,8 @@ function normalizeLocalAutomationItem(item) {
     html: item.html || '',
     copyText: item.copyText || item.text || '',
     rawText: item.rawText || '',
+    sourceUrl: item.sourceUrl || '',
+    sourceLabel: item.sourceLabel || '',
   };
 }
 
@@ -276,6 +290,8 @@ function removeResponseControls(el) {
   el.classList.remove('msg-copyable');
   delete el.dataset.editing;
   delete el.dataset.copyText;
+  delete el.dataset.sourceUrl;
+  delete el.dataset.sourceLabel;
 }
 
 function setIconButtonState(btn, stateName) {
@@ -387,6 +403,8 @@ function saveResponseEdit(el) {
       html: nextHtml,
       copyText: nextText,
       rawText: nextText,
+      sourceUrl: el.dataset.sourceUrl || '',
+      sourceLabel: el.dataset.sourceLabel || '',
     }).catch(showLocalAutomationStorageError);
   }
   el._responseOnSave?.(nextText, nextHtml);
@@ -443,6 +461,58 @@ function ensureCopyButton(el) {
   return btn;
 }
 
+function isSafeSourceUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function ensureSourceButton(el) {
+  if (!isSafeSourceUrl(el.dataset.sourceUrl || '')) return null;
+
+  const row = responseActionsRow(el);
+  let btn = row.querySelector('.msg-source-btn');
+  if (btn) return btn;
+
+  btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msg-source-btn';
+  btn.innerHTML = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M10 13a5 5 0 0 0 7.1 0l2.1-2.1a5 5 0 0 0-7.1-7.1l-1.2 1.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path d="M14 11a5 5 0 0 0-7.1 0l-2.1 2.1a5 5 0 0 0 7.1 7.1l1.2-1.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+  `;
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const url = el.dataset.sourceUrl || '';
+    if (!isSafeSourceUrl(url)) return;
+    chrome.tabs?.create ? chrome.tabs.create({ url }) : window.open(url, '_blank', 'noopener');
+  });
+  row.appendChild(btn);
+  updateSourceButtonLabel(el);
+  return btn;
+}
+
+function updateSourceButtonLabel(el) {
+  const btn = responseActionsRow(el).querySelector('.msg-source-btn');
+  if (!btn) return;
+  const label = el.dataset.sourceLabel || 'Source';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
+function setResponseSource(el, sourceUrl, sourceLabel = 'Source') {
+  if (!isSafeSourceUrl(sourceUrl || '')) return;
+  el.dataset.sourceUrl = sourceUrl;
+  el.dataset.sourceLabel = sourceLabel;
+  ensureSourceButton(el);
+  updateSourceButtonLabel(el);
+}
+
 function setTransientResponse(el, html) {
   messageBody(el).innerHTML = html;
   removeResponseControls(el);
@@ -489,13 +559,14 @@ async function sendProductDesc(sourceText, gptBtn) {
       `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
       `Sent: ${url}`
     );
+    setResponseSource(result, url, 'Open ChatGPT conversation');
     scrollResponseIntoView(result);
     saveLocalAutomationResponse(
       result,
       'product',
       `Sent: ${url}`,
       `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
-      { rawText: sourceText }
+      { rawText: sourceText, sourceUrl: url, sourceLabel: 'Open ChatGPT conversation' }
     );
     if (gptBtn) {
       setActionIconState(gptBtn, 'done', 'Product Description sent');
@@ -664,8 +735,11 @@ function saveLocalAutomationResponse(el, kind, text, html, options = {}) {
     html,
     copyText: options.copyText || text,
     rawText: options.rawText || text,
+    sourceUrl: options.sourceUrl || '',
+    sourceLabel: options.sourceLabel || '',
   });
   tagLocalAutomationElement(el, item);
+  setResponseSource(el, item.sourceUrl, item.sourceLabel);
   persistLocalAutomationItem(item);
   return item;
 }
@@ -732,7 +806,8 @@ function addGeminiActionsToResponse(msgEl, getText) {
     messages.scrollTop = messages.scrollHeight;
 
     try {
-      const { content } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
+      const { content, sourceUrl } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
+      const gemSourceUrl = sourceUrl || geminiSourceUrl(gemId);
       const responseText = content || '';
       result.dataset.rawText = content || '';
       setResponseHtml(
@@ -741,12 +816,21 @@ function addGeminiActionsToResponse(msgEl, getText) {
         content || 'No response received.',
         savedText => { result.dataset.rawText = savedText; }
       );
+      setResponseSource(
+        result,
+        gemSourceUrl,
+        kind === 'image' ? 'Open Gemini Image Prompt Gem' : 'Open Gemini Bullet Points Gem'
+      );
       saveLocalAutomationResponse(
         result,
         kind,
         content || 'No response received.',
         content ? renderMarkdown(content) : '<em>No response received.</em>',
-        { rawText: content || '' }
+        {
+          rawText: content || '',
+          sourceUrl: gemSourceUrl,
+          sourceLabel: kind === 'image' ? 'Open Gemini Image Prompt Gem' : 'Open Gemini Bullet Points Gem',
+        }
       );
 
       if (kind === 'bullets' && content) {
@@ -793,13 +877,14 @@ function addGeminiActionsToResponse(msgEl, getText) {
   });
 }
 
-function appendMessage(role, text) {
+function appendMessage(role, text, options = {}) {
   const el = document.createElement('div');
   el.className = `msg msg-${role}`;
   if (role === 'ai') {
     let currentText = text;
     messages.appendChild(el);
     setResponseHtml(el, renderMarkdown(text), text, savedText => { currentText = savedText; });
+    setResponseSource(el, options.sourceUrl || notebookSourceUrl(), options.sourceLabel || 'Open NotebookLM notebook');
     addGeminiActionsToResponse(el, () => currentText);
   } else {
     el.textContent = text;
@@ -847,12 +932,19 @@ function appendSavedLocalAutomationItem(item) {
     item.copyText || item.text || '',
     savedText => { el.dataset.rawText = savedText; }
   );
+  setResponseSource(
+    el,
+    item.sourceUrl || (item.kind === 'product' ? chatGptSourceUrl(item.text || item.copyText || '') : ''),
+    item.sourceLabel || (item.kind === 'product' ? 'Open ChatGPT conversation' : '')
+  );
   tagLocalAutomationElement(el, item);
 
   if (item.kind === 'bullets') {
+    if (!el.dataset.sourceUrl) setResponseSource(el, geminiSourceUrl('9e495ec3e447'), 'Open Gemini Bullet Points Gem');
     attachProductDescriptionAction(el, item.rawText || item.copyText || item.text || '');
   }
   if (item.kind === 'image') {
+    if (!el.dataset.sourceUrl) setResponseSource(el, geminiSourceUrl('6a7373766848'), 'Open Gemini Image Prompt Gem');
     attachCreateImageAction(el, item.rawText || item.copyText || item.text || '');
   }
   messages.scrollTop = messages.scrollHeight;
@@ -875,6 +967,7 @@ function appendAnalysisMessage(rawText) {
   let currentText = rawText;
   messages.appendChild(msgEl);
   setResponseHtml(msgEl, renderMarkdown(rawText), rawText, text => { currentText = text; });
+  setResponseSource(msgEl, notebookSourceUrl(), 'Open NotebookLM notebook');
 
   const bulletsBtn = createActionIconButton('bullets', 'Bullet Points', 'btn-gem');
   const imageBtn = createActionIconButton('image', 'Image Prompt', 'btn-gem');
@@ -928,13 +1021,14 @@ function appendAnalysisMessage(rawText) {
         `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
         `Sent: ${url}`
       );
+      setResponseSource(result, url, 'Open ChatGPT conversation');
       scrollResponseIntoView(result);
       saveLocalAutomationResponse(
         result,
         'product',
         `Sent: ${url}`,
         `Sent: <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">Product Description</a>`,
-        { rawText: sourceText }
+        { rawText: sourceText, sourceUrl: url, sourceLabel: 'Open ChatGPT conversation' }
       );
       if (gptBtn) {
         setActionIconState(gptBtn, 'done', 'Product Description sent');
@@ -971,7 +1065,8 @@ function appendAnalysisMessage(rawText) {
     setTransientResponse(result, `<em class="msg-thinking msg-thinking-inline"><span class="action-spinner" aria-hidden="true"></span>${escHtml(thinking)}</em>`);
     messages.scrollTop = messages.scrollHeight;
     try {
-      const { content } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
+      const { content, sourceUrl } = await send({ type: 'SEND_TO_GEMINI', text, gemId });
+      const gemSourceUrl = sourceUrl || geminiSourceUrl(gemId);
       const responseText = content || '';
       result.dataset.rawText = content || '';
       setResponseHtml(
@@ -980,12 +1075,21 @@ function appendAnalysisMessage(rawText) {
         content || 'No response received.',
         savedText => { result.dataset.rawText = savedText; }
       );
+      setResponseSource(
+        result,
+        gemSourceUrl,
+        kind === 'image' ? 'Open Gemini Image Prompt Gem' : 'Open Gemini Bullet Points Gem'
+      );
       saveLocalAutomationResponse(
         result,
         kind,
         content || 'No response received.',
         content ? renderMarkdown(content) : '<em>No response received.</em>',
-        { rawText: content || '' }
+        {
+          rawText: content || '',
+          sourceUrl: gemSourceUrl,
+          sourceLabel: kind === 'image' ? 'Open Gemini Image Prompt Gem' : 'Open Gemini Bullet Points Gem',
+        }
       );
 
       if (kind === 'bullets' && content) {

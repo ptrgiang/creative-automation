@@ -531,6 +531,7 @@ select option { background: var(--surface-strong); }
 }
 
 .msg-edit-btn,
+.msg-source-btn,
 .msg-copy-btn {
   display: inline-flex;
   align-items: center;
@@ -568,6 +569,7 @@ select option { background: var(--surface-strong); }
 
 .msg-edit-btn:hover,
 .msg-edit-btn.editing,
+.msg-source-btn:hover,
 .msg-copy-btn:hover,
 .msg-copy-btn.copied {
   background: var(--accent);
@@ -1509,6 +1511,7 @@ input[type="url"] {
 }
 
 .msg-edit-btn,
+.msg-source-btn,
 .msg-copy-btn,
 .action-icon-btn {
   background: var(--surface-raised);
@@ -2189,6 +2192,7 @@ input,
 .btn-gem:hover,
 .btn-gpt:hover,
 .msg-edit-btn:hover,
+.msg-source-btn:hover,
 .msg-copy-btn:hover {
   transform: none;
 }
