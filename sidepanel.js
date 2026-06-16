@@ -953,6 +953,17 @@ function appendMessage(role, text, options = {}) {
   return el;
 }
 
+function compactPromptText(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function displayConversationTurnText(role, text) {
+  if (role === 'user' && compactPromptText(text) === compactPromptText(COMPARE_LISTINGS_PROMPT)) {
+    return 'Compare Listings';
+  }
+  return text;
+}
+
 function renderConversationTurns(turns) {
   messages.innerHTML = '';
   if (!Array.isArray(turns) || turns.length === 0) return;
@@ -960,7 +971,7 @@ function renderConversationTurns(turns) {
   for (const turn of turns) {
     if (!turn.text) continue;
     const role = turn.role === 'user' ? 'user' : 'ai';
-    appendMessage(role, turn.text);
+    appendMessage(role, displayConversationTurnText(role, turn.text));
   }
 }
 
